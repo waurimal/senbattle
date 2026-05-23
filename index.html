@@ -724,8 +724,39 @@
                             {editingUnit.sentences.map((s, idx) => (
                               <div key={s.id || idx} className="flex flex-col gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-200 relative group">
                                 <div className="flex items-center gap-3">
-                              }}
-                              className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  <span className="font-black text-slate-300">{idx + 1}</span>
+                                  <input 
+                                    value={s.ko}
+                                    onChange={(e) => {
+                                      const newS = [...editingUnit.sentences];
+                                      newS[idx].ko = e.target.value;
+                                      setEditingUnit({...editingUnit, sentences: newS});
+                                    }}
+                                    className="flex-1 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-bold bg-white"
+                                    placeholder="한글 뜻 입력 (예: 사과)"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-3 pl-5">
+                                  <span className="text-blue-300 font-black">EN</span>
+                                  <input 
+                                    value={s.en}
+                                    onChange={(e) => {
+                                      const newS = [...editingUnit.sentences];
+                                      newS[idx].en = e.target.value;
+                                      setEditingUnit({...editingUnit, sentences: newS});
+                                    }}
+                                    className="flex-1 p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 font-bold bg-white text-blue-600"
+                                    placeholder="영어 문장 입력 (예: apple)"
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    const newS = editingUnit.sentences.filter((_, i) => i !== idx);
+                                    setEditingUnit({...editingUnit, sentences: newS});
+                                  }}
+                                  className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Trash2 size={20} />
                                 </button>
                               </div>
                             ))}
