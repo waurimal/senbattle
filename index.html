@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentence Battle</title>
+  
+  <!-- Tailwind CSS 로드 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Babel: 브라우저에서 React(JSX) 코드를 실행할 수 있게 해줌 -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    /* 깔끔한 폰트 (Pretendard) 적용 */
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
+    import * as ReactDOMClient from 'https://esm.sh/react-dom@18.2.0/client';
+    import { Trophy, Swords, Shield, Users, User, ArrowLeft, Play, Clock, Medal, Crown, Settings, LogOut, CheckCircle2, AlertCircle } from 'https://esm.sh/lucide-react@0.294.0';
+
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+    import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+    // 🔥 선생님의 Firebase 프로젝트 설정으로 아래 값을 변경하세요! 🔥
+    // Firebase 콘솔 -> 프로젝트 설정 -> 웹 앱 추가 시 나오는 설정값 복사
+      apiKey: "AIzaSyAqGKmnWbqkmxAhe0M9jlln4YjhhKb46oM",
+      authDomain: "senbattle-494ac.firebaseapp.com",
+      projectId: "senbattle-494ac",
+      storageBucket: "senbattle-494ac.firebasestorage.app",
+      messagingSenderId: "953277052730",
+      appId: "1:953277052730:web:3392ea4d001c436dbdc203",
+      measurementId: "G-BSYG25HXQC"
+    };
+
+    // 현재 환경이 미리보기(Immersive) 환경인지, 실제 선생님의 깃허브 페이지인지 확인
+    const isImmersive = typeof window.__firebase_config !== 'undefined';
+    const activeConfig = isImmersive ? JSON.parse(window.__firebase_config) : myFirebaseConfig;
+
+    // Firebase 설정이 안 되어 있을 경우 경고 화면 출력 (깃허브 업로드 시)
+    if (!isImmersive && activeConfig.apiKey === "YOUR_API_KEY") {
+        const SetupWarning = () => (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+                <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl border-t-8 border-red-500">
+                   <h1 className="text-3xl font-black text-red-500 mb-6 flex items-center justify-center gap-3"><AlertCircle size={36}/> Firebase 설정 필요!</h1>
+                   <p className="text-slate-600 text-lg mb-6 leading-relaxed">
+                     이 게임을 선생님의 GitHub Pages에서 실행하려면 <br/>
+                     <b>index.html</b> 파일 내부의 <code className="bg-slate-100 px-3 py-1 rounded-lg text-red-500 font-mono text-sm">myFirebaseConfig</code> 부분을 <br/>
+                     선생님의 Firebase 프로젝트 설정값으로 변경해야 합니다.
+                   </p>
+                   <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm font-bold text-left mb-6">
+                     💡 팁: Firebase 콘솔 &gt; 프로젝트 추가 &gt; 웹 앱(&lt;/&gt;) 추가 후 나타나는 config 코드를 복사하세요. <br/>
+                     (반드시 빌드(Firestore Database)를 생성하고 규칙을 테스트 모드로 설정해야 합니다.)
+                   </div>
+                </div>
+            </div>
+        );
+        const root = ReactDOMClient.createRoot(document.getElementById('root'));
+        root.render(<SetupWarning />);
+        throw new Error("Firebase config is required");
+    }
+
+    // Firebase 초기화
+    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'sentence-battle-app';
+    const app = initializeApp(activeConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const getPublicPath = (collectionName) => collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+    const getPublicDocPath = (collectionName, docId) => doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId);
+
+    const SENTENCES = [
+      { id: 1, ko: "그것은 식은 죽 먹기다.", en: "It is a piece of cake." },
+      { id: 2, ko: "나는 어제 축구를 했다.", en: "I played soccer yesterday." },
+      { id: 3, ko: "그녀는 피아노 치는 것을 좋아한다.", en: "She likes playing the piano." },
+      { id: 4, ko: "우리는 학교에 가는 길이다.", en: "We are on our way to school." },
+      { id: 5, ko: "비가 억수같이 내리고 있다.", en: "It is raining cats and dogs." },
+      { id: 6, ko: "그는 항상 일찍 일어난다.", en: "He always gets up early." },
+      { id: 7, ko: "도서관은 우체국 옆에 있습니다.", en: "The library is next to the post office." },
+      { id: 8, ko: "이 책은 매우 흥미롭다.", en: "This book is very interesting." },
+      { id: 9, ko: "도와주셔서 감사합니다.", en: "Thank you for your help." },
+      { id: 10, ko: "내일 날씨가 맑았으면 좋겠다.", en: "I hope it will be sunny tomorrow." },
+      { id: 11, ko: "포기하지 마세요.", en: "Don't give up." },
+      { id: 12, ko: "만나서 반갑습니다.", en: "Nice to meet you." },
+      { id: 13, ko: "무슨 일 있어요?", en: "What's the matter?" },
+      { id: 14, ko: "최선을 다하겠습니다.", en: "I will do my best." },
+      { id: 15, ko: "시간이 참 빨리 가네요.", en: "Time flies so fast." }
+    ];
+
+    const MAX_TIME_MS = 20000; // 공격/방어 제한 시간 (20초)
+    const MAX_ROUNDS = 6; // 총 진행할 라운드 수
+
+    // 4자리 숫자 방 참여 코드 생성 함수
+    const generateRoomCode = () => {
+      let code = '';
+      for (let i = 0; i < 4; i++) code += Math.floor(Math.random() * 10).toString();
+      return code;
+    };
+
+    function App() {
+      const [user, setUser] = useState(null);
+      const [profile, setProfile] = useState(null); // { name, grade, classNum, studentNum }
+      const [view, setView] = useState('home'); // home, profile, lobby, room, game, leaderboard, teacher
+      const [rooms, setRooms] = useState([]);
+      const [currentRoom, setCurrentRoom] = useState(null);
+      const [leaderboardData, setLeaderboardData] = useState([]);
+      const [toastMessage, setToastMessage] = useState('');
+
+      const [joinCode, setJoinCode] = useState('');
+      const [selectedRoomToJoin, setSelectedRoomToJoin] = useState(null);
+
+      const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 3000);
+      };
+
+      useEffect(() => {
+        const initAuth = async () => {
+          try {
+            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+              await signInWithCustomToken(auth, window.__initial_auth_token);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (error) {
+            console.error("Auth error:", error);
+          }
+        };
+        initAuth();
+
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+          setUser(currentUser);
+        });
+        return () => unsubscribe();
+      }, []);
+
+      useEffect(() => {
+        if (!user || (view !== 'lobby' && view !== 'leaderboard')) return;
+
+        const unsubscribeRooms = onSnapshot(getPublicPath('rooms'), (snapshot) => {
+          const roomList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const activeRooms = roomList.filter(r => r.status !== 'finished');
+          setRooms(activeRooms);
+        }, (error) => console.error("Rooms fetch error:", error));
+
+        const unsubscribeLeaderboard = onSnapshot(getPublicPath('leaderboards'), (snapshot) => {
+          const lbList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setLeaderboardData(lbList);
+        }, (error) => console.error("Leaderboard fetch error:", error));
+
+        return () => {
+          unsubscribeRooms();
+          unsubscribeLeaderboard();
+        };
+      }, [user, view]);
+
+      useEffect(() => {
+        if (!user || !currentRoom?.id) return;
+        
+        const unsubscribeRoom = onSnapshot(getPublicDocPath('rooms', currentRoom.id), (docSnap) => {
+          if (docSnap.exists()) {
+            const roomData = { id: docSnap.id, ...docSnap.data() };
+            setCurrentRoom(roomData);
+            if (roomData.status === 'playing' && view === 'room') setView('game');
+            if (roomData.status === 'finished' && view === 'game') setView('lobby');
+          } else {
+            setCurrentRoom(null);
+            if (view === 'room' || view === 'game') setView('lobby');
+          }
+        });
+
+        return () => unsubscribeRoom();
+      }, [user, currentRoom?.id, view]);
+
+      const handleProfileSubmit = (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const p = {
+          name: fd.get('name') || `학생_${Math.floor(Math.random()*100)}`,
+          grade: fd.get('grade') || '1',
+          classNum: fd.get('classNum') || '1',
+          studentNum: fd.get('studentNum') || '1'
+        };
+        setProfile(p);
+        setView('lobby');
+      };
+
+      const createRoom = async (mode) => {
+        if (!user) return;
+        const code = generateRoomCode();
+        const newRoomRef = doc(getPublicPath('rooms'));
+        const roomData = {
+          hostId: user.uid,
+          roomCode: code,
+          mode: mode, // '1v1', 'team', 'class'
+          status: 'waiting',
+          turn: 'A',
+          round: 1,
+          grade: profile.grade,
+          classNum: profile.classNum,
+          teamA: { score: 0, players: [{ uid: user.uid, name: profile.name, grade: profile.grade, classNum: profile.classNum, studentNum: profile.studentNum }] },
+          teamB: { score: 0, players: [] },
+          currentAttack: null,
+          createdAt: Date.now()
+        };
+        await setDoc(newRoomRef, roomData);
+        setCurrentRoom({ id: newRoomRef.id, ...roomData });
+        setView('room');
+      };
+
+      const joinRoom = async (room, teamName) => {
+        if (!user) return;
+        const roomRef = getPublicDocPath('rooms', room.id);
+        const roomSnap = await getDoc(roomRef);
+        if (!roomSnap.exists()) return;
+        
+        const data = roomSnap.data();
+        const inTeamA = data.teamA.players.some(p => p.uid === user.uid);
+        const inTeamB = data.teamB.players.some(p => p.uid === user.uid);
+        
+        let updatedData = { ...data };
+        
+        if (inTeamA && teamName === 'teamB') {
+          updatedData.teamA.players = updatedData.teamA.players.filter(p => p.uid !== user.uid);
+        } else if (inTeamB && teamName === 'teamA') {
+          updatedData.teamB.players = updatedData.teamB.players.filter(p => p.uid !== user.uid);
+        }
+
+        if (!updatedData[teamName].players.some(p => p.uid === user.uid)) {
+          updatedData[teamName].players.push({ uid: user.uid, name: profile.name, grade: profile.grade, classNum: profile.classNum, studentNum: profile.studentNum });
+        }
+
+        await updateDoc(roomRef, { teamA: updatedData.teamA, teamB: updatedData.teamB });
+        setCurrentRoom({ id: roomRef.id, ...updatedData });
+        setView('room');
+        setSelectedRoomToJoin(null);
+        setJoinCode('');
+      };
+
+      const handleSearchRoom = () => {
+        const code = joinCode.trim();
+        if (!code) {
+          showToast("참여 코드를 입력해주세요.");
+          return;
+        }
+        const targetRoom = rooms.find(r => r.roomCode === code);
+        if (targetRoom) {
+          setSelectedRoomToJoin(targetRoom);
+        } else {
+          showToast("존재하지 않거나 이미 종료된 방 코드입니다.");
+        }
+      };
+
+      const leaveRoom = async () => {
+        if (!user || !currentRoom) return;
+        const roomRef = getPublicDocPath('rooms', currentRoom.id);
+        const roomSnap = await getDoc(roomRef);
+        if (roomSnap.exists()) {
+          const data = roomSnap.data();
+          const updatedA = data.teamA.players.filter(p => p.uid !== user.uid);
+          const updatedB = data.teamB.players.filter(p => p.uid !== user.uid);
+          
+          if (updatedA.length === 0 && updatedB.length === 0) {
+            await deleteDoc(roomRef);
+          } else {
+            await updateDoc(roomRef, {
+              'teamA.players': updatedA,
+              'teamB.players': updatedB,
+              hostId: data.hostId === user.uid ? (updatedA[0]?.uid || updatedB[0]?.uid) : data.hostId
+            });
+          }
+        }
+        setCurrentRoom(null);
+        setView('lobby');
+      };
+
+      const startGame = async () => {
+        if (!user || !currentRoom) return;
+        const roomRef = getPublicDocPath('rooms', currentRoom.id);
+        await updateDoc(roomRef, { status: 'playing' });
+      };
+
+      const executeAttack = async (sentence) => {
+        if (!user || !currentRoom) return;
+        const roomRef = getPublicDocPath('rooms', currentRoom.id);
+        await updateDoc(roomRef, {
+          currentAttack: {
+            id: sentence.id,
+            ko: sentence.ko,
+            en: sentence.en,
+            startTime: Date.now()
+          }
+        });
+      };
+
+      const handleDefenseInput = async (e) => {
+        const val = e.target.value;
+        if (!currentRoom?.currentAttack) return;
+        
+        const targetEn = currentRoom.currentAttack.en;
+        
+        // 정답 체크 (대소문자 무시, 공백 및 특수기호 정상화)
+        if (val.trim().toLowerCase() === targetEn.trim().toLowerCase()) {
+          e.target.value = ''; // 입력창 초기화
+          
+          const timeTaken = Date.now() - currentRoom.currentAttack.startTime;
+          let points = Math.max(10, Math.floor(((MAX_TIME_MS - timeTaken) / MAX_TIME_MS) * 100));
+          if (timeTaken > MAX_TIME_MS) points = 10;
+          
+          const isTeamA = currentRoom.teamA.players.some(p => p.uid === user.uid);
+          const myTeam = isTeamA ? 'teamA' : 'teamB';
+          const newScore = currentRoom[myTeam].score + points;
+          const nextTurn = currentRoom.turn === 'A' ? 'B' : 'A';
+          const nextRound = currentRoom.turn === 'B' ? currentRoom.round + 1 : currentRoom.round;
+          
+          const roomRef = getPublicDocPath('rooms', currentRoom.id);
+          
+          showToast(`${profile.name}님이 정답을 맞췄습니다! (+${points}점)`);
+
+          if (nextRound > MAX_ROUNDS) {
+            await finishGame(roomRef, currentRoom, myTeam, newScore);
+          } else {
+            await updateDoc(roomRef, {
+              currentAttack: null,
+              [`${myTeam}.score`]: newScore,
+              turn: nextTurn,
+              round: nextRound
+            });
+          }
+        }
+      };
+
+      const finishGame = async (roomRef, roomData, lastScoringTeam, lastScore) => {
+        const scoreA = lastScoringTeam === 'teamA' ? lastScore : roomData.teamA.score;
+        const scoreB = lastScoringTeam === 'teamB' ? lastScore : roomData.teamB.score;
+        
+        await updateDoc(roomRef, {
+          status: 'finished',
+          currentAttack: null,
+          'teamA.score': scoreA,
+          'teamB.score': scoreB
+        });
+
+        const lbRef = doc(getPublicPath('leaderboards'));
+        await setDoc(lbRef, {
+          roomId: roomData.id,
+          mode: roomData.mode,
+          grade: roomData.grade,
+          classNum: roomData.classNum,
+          timestamp: Date.now(),
+          teamA_score: scoreA,
+          teamB_score: scoreB,
+          playersA: roomData.teamA.players.map(p => p.name).join(', '),
+          playersB: roomData.teamB.players.map(p => p.name).join(', ')
+        });
+
+        setCurrentRoom(null);
+        setView('lobby');
+        showToast("게임이 종료되었습니다. 순위표를 확인해보세요!");
+      };
+
+      useEffect(() => {
+        if (view !== 'game' || !currentRoom?.currentAttack) return;
+        
+        const interval = setInterval(() => {
+          const timePassed = Date.now() - currentRoom.currentAttack.startTime;
+          if (timePassed >= MAX_TIME_MS) {
+            if (currentRoom.hostId === user?.uid) {
+              const nextTurn = currentRoom.turn === 'A' ? 'B' : 'A';
+              const nextRound = currentRoom.turn === 'B' ? currentRoom.round + 1 : currentRoom.round;
+              const roomRef = getPublicDocPath('rooms', currentRoom.id);
+              
+              if (nextRound > MAX_ROUNDS) {
+                finishGame(roomRef, currentRoom, 'none', 0);
+              } else {
+                updateDoc(roomRef, {
+                  currentAttack: null,
+                  turn: nextTurn,
+                  round: nextRound
+                });
+              }
+            }
+          }
+        }, 1000);
+
+        return () => clearInterval(interval);
+      }, [view, currentRoom, user]);
+
+
+      const Toast = () => {
+        if (!toastMessage) return null;
+        return (
+          <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 animate-bounce">
+            <div className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 font-bold">
+              <CheckCircle2 className="text-green-400" />
+              {toastMessage}
+            </div>
+          </div>
+        );
+      };
+
+      if (view === 'home') {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-800">
+            <Toast />
+            <div className="w-full max-w-md">
+              <div className="text-center mb-10">
+                <h1 className="text-5xl md:text-6xl font-black text-blue-600 mb-4 tracking-tight drop-shadow-sm">
+                  Sentence Battle
+                </h1>
+                <p className="text-xl text-slate-600 font-bold bg-white inline-block px-4 py-1 rounded-full shadow-sm border border-slate-200">
+                  이의초등학교 <span className="font-normal">| 영어 문장 타이핑 게임</span>
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
+                   <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
+                   <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
+                </button>
+                
+                <button onClick={() => setView('leaderboard')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white p-6 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-emerald-700">
+                   <span className="text-2xl font-black mb-1 flex items-center gap-2"><Trophy fill="currentColor" size={24} /> 순위 확인</span>
+                   <span className="text-emerald-100 font-medium">우리 반, 학년, 전체 랭킹 보기</span>
+                </button>
+
+                <button onClick={() => setView('teacher')} className="w-full bg-white hover:bg-slate-100 text-slate-700 p-6 rounded-2xl shadow-lg border-2 border-slate-200 transition-all hover:-translate-y-1 flex flex-col items-center">
+                   <span className="text-xl font-bold flex items-center gap-2"><Settings size={20} /> 교사 모드 (설정)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'teacher') {
+        return (
+          <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-800">
+            <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+              <div className="flex justify-center mb-6 text-slate-400">
+                <Shield size={48} />
+              </div>
+              <h2 className="text-2xl font-black text-center mb-6">교사 인증</h2>
+              <div className="space-y-4 mb-8">
+                <input type="password" placeholder="비밀번호" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-center focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" />
+                <button className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-xl transition-colors">
+                  인증하기
+                </button>
+              </div>
+              <div className="flex justify-between items-center text-sm font-bold text-slate-500">
+                <button onClick={() => setView('home')} className="flex items-center gap-1 hover:text-blue-600"><ArrowLeft size={16}/> 뒤로</button>
+                <button className="hover:text-blue-600 underline">비밀번호 초기화</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'profile') {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-800">
+            <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-100">
+              <div className="flex items-center gap-4 mb-8 border-b border-slate-100 pb-4">
+                <button onClick={() => setView('home')} className="text-slate-400 hover:text-blue-600"><ArrowLeft size={24} /></button>
+                <h1 className="text-2xl font-black text-blue-600">참여자 정보 입력</h1>
+              </div>
+              
+              <form onSubmit={handleProfileSubmit} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-bold text-slate-500 mb-2">이름 / 닉네임</label>
+                  <input name="name" required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="홍길동" defaultValue={profile?.name || ''} />
+                </div>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-slate-500 mb-2">학년</label>
+                    <select name="grade" defaultValue={profile?.grade || '1'} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                      {[1,2,3,4,5,6].map(g => <option key={g} value={g}>{g}학년</option>)}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-slate-500 mb-2">반</label>
+                    <select name="classNum" defaultValue={profile?.classNum || '1'} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                      {Array.from({length: 20}, (_, i) => i + 1).map(c => <option key={c} value={c}>{c}반</option>)}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-slate-500 mb-2">번호</label>
+                    <input name="studentNum" type="number" min="1" max="100" defaultValue={profile?.studentNum || '1'} required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" />
+                  </div>
+                </div>
+                <button type="submit" className="w-full mt-8 bg-blue-500 hover:bg-blue-600 text-white font-black text-lg py-4 rounded-xl transition-all shadow-md shadow-blue-500/20 hover:-translate-y-1">
+                  게임 방법 선택하기
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'lobby') {
+        return (
+          <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
+            <Toast />
+            <div className="max-w-5xl mx-auto">
+              {/* Header */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <h1 className="text-3xl font-black text-blue-600 flex items-center gap-3">
+                  <Swords className="text-blue-500" size={32} />
+                  대기실
+                </h1>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-slate-400">나의 정보</div>
+                    <div className="font-black text-slate-700">{profile?.grade}학년 {profile?.classNum}반 {profile?.studentNum}번 <span className="text-blue-600">{profile?.name}</span></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setView('profile')} className="p-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-600 font-bold transition-colors">
+                      정보 수정
+                    </button>
+                    <button onClick={() => setView('home')} className="p-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-600 font-bold transition-colors">
+                      <LogOut size={20} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-8">
+                {/* 방 만들기 섹션 */}
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                  <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
+                    <span className="w-2 h-6 bg-blue-500 rounded-full inline-block"></span>
+                    새로운 방 만들기
+                  </h2>
+                  <div className="flex flex-col gap-4">
+                    <button onClick={() => createRoom('1v1')} className="bg-slate-50 hover:bg-blue-50 hover:border-blue-300 border-2 border-slate-100 p-5 rounded-2xl transition-all text-left flex items-center gap-4 group">
+                      <div className="bg-blue-100 w-12 h-12 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <User size={24} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-800">1:1 대결</h3>
+                        <p className="text-sm text-slate-500 font-medium">친구와 단둘이 실력을 겨룹니다.</p>
+                      </div>
+                    </button>
+                    <button onClick={() => createRoom('team')} className="bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 border-2 border-slate-100 p-5 rounded-2xl transition-all text-left flex items-center gap-4 group">
+                      <div className="bg-emerald-100 w-12 h-12 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <Users size={24} className="text-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-800">팀 대결</h3>
+                        <p className="text-sm text-slate-500 font-medium">여러 명이 팀을 이뤄 대결합니다.</p>
+                      </div>
+                    </button>
+                    <button onClick={() => createRoom('class')} className="bg-slate-50 hover:bg-purple-50 hover:border-purple-300 border-2 border-slate-100 p-5 rounded-2xl transition-all text-left flex items-center gap-4 group">
+                      <div className="bg-purple-100 w-12 h-12 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <Crown size={24} className="text-purple-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-800">학급 대결</h3>
+                        <p className="text-sm text-slate-500 font-medium">반 대항전! 학급의 명예를 걸고 싸우세요.</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 방 참여하기 섹션 */}
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col">
+                  <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
+                    <span className="w-2 h-6 bg-emerald-500 rounded-full inline-block"></span>
+                    코드로 방 참여하기
+                  </h2>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <div className="bg-slate-50 p-8 rounded-3xl border-2 border-slate-100 text-center overflow-hidden flex flex-col items-center">
+                      <p className="text-slate-500 font-bold mb-6">친구에게 받은 4자리 숫자를 입력하세요!</p>
+                      <div className="w-48">
+                        <input 
+                          type="text" 
+                          maxLength={4}
+                          value={joinCode}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            setJoinCode(val);
+                          }}
+                          placeholder="1234" 
+                          className="w-full bg-white border-2 border-slate-200 rounded-2xl p-4 text-center text-3xl font-black tracking-widest text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all"
+                        />
+                      </div>
+                      <button 
+                        onClick={handleSearchRoom}
+                        disabled={joinCode.length !== 4}
+                        className={`w-full mt-6 py-4 rounded-2xl font-black text-lg transition-all shadow-md
+                          ${joinCode.length === 4 ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20 hover:-translate-y-1' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                      >
+                        코드 입력 및 입장
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 팀 선택 모달 */}
+              {selectedRoomToJoin && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                  <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-slate-100 animate-in fade-in zoom-in duration-200">
+                    <div className="text-center mb-8">
+                      <h2 className="text-2xl font-black text-slate-800 mb-2">팀을 선택하세요!</h2>
+                      <p className="text-slate-500 font-bold">
+                        {selectedRoomToJoin.grade}학년 {selectedRoomToJoin.classNum}반 
+                        <span className="bg-slate-100 px-2 py-1 rounded-md ml-2 text-indigo-600">코드: {selectedRoomToJoin.roomCode}</span>
+                      </p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <button onClick={() => joinRoom(selectedRoomToJoin, 'teamA')} className="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white border-2 border-red-200 hover:border-red-500 p-6 rounded-2xl font-black transition-all group flex flex-col items-center gap-2">
+                        <Shield size={32} className="group-hover:scale-110 transition-transform" />
+                        Team A (홍팀)
+                        <span className="text-sm font-bold opacity-80 mt-2 bg-white/40 text-red-800 group-hover:text-white px-3 py-1 rounded-full">{selectedRoomToJoin.teamA.players.length}명 대기중</span>
+                      </button>
+                      <button onClick={() => joinRoom(selectedRoomToJoin, 'teamB')} className="bg-blue-50 hover:bg-blue-500 text-blue-600 hover:text-white border-2 border-blue-200 hover:border-blue-500 p-6 rounded-2xl font-black transition-all group flex flex-col items-center gap-2">
+                        <Shield size={32} className="group-hover:scale-110 transition-transform" />
+                        Team B (청팀)
+                        <span className="text-sm font-bold opacity-80 mt-2 bg-white/40 text-blue-800 group-hover:text-white px-3 py-1 rounded-full">{selectedRoomToJoin.teamB.players.length}명 대기중</span>
+                      </button>
+                    </div>
+
+                    <button onClick={() => setSelectedRoomToJoin(null)} className="w-full py-3 text-slate-500 font-bold hover:bg-slate-100 rounded-xl transition-colors border border-slate-200">
+                      취소하기
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'room' && currentRoom) {
+        const isHost = currentRoom.hostId === user?.uid;
+        const canStart = currentRoom.teamA.players.length > 0 && currentRoom.teamB.players.length > 0;
+
+        return (
+          <div className="min-h-screen bg-slate-50 p-6 flex flex-col">
+            <div className="max-w-5xl mx-auto w-full flex-1 flex flex-col">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-4">
+                  <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
+                    <span className="bg-white p-2 rounded-xl shadow-sm border border-slate-100"><Users className="text-blue-600" /></span>
+                    게임 대기실
+                  </h1>
+                  <div className="bg-indigo-100 border-2 border-indigo-200 text-indigo-700 px-4 py-2 rounded-xl font-black flex items-center gap-2 shadow-sm ml-4">
+                    <span>참여 코드:</span>
+                    <span className="text-2xl tracking-widest">{currentRoom.roomCode}</span>
+                  </div>
+                </div>
+                <button onClick={leaveRoom} className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-2 bg-white px-5 py-3 rounded-xl shadow-sm border border-slate-200 transition-all hover:bg-slate-100">
+                  <ArrowLeft size={20} /> 나가기
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 mb-8">
+                {/* Team A */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border-t-8 border-red-500 flex flex-col">
+                  <h2 className="text-2xl font-black text-red-600 mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
+                    <span>Team A (홍팀)</span>
+                    <span className="text-sm bg-red-100 text-red-700 px-3 py-1 rounded-full">{currentRoom.teamA.players.length}명</span>
+                  </h2>
+                  <ul className="space-y-3 flex-1 overflow-y-auto min-h-[200px]">
+                    {currentRoom.teamA.players.map((p, idx) => (
+                      <li key={idx} className="bg-slate-50 p-4 rounded-2xl flex items-center gap-3 border border-slate-100 font-bold text-slate-700">
+                        <div className="bg-red-200 text-red-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">{idx + 1}</div>
+                        {p.grade}-{p.classNum} {p.studentNum ? `${p.studentNum}번 ` : ''}{p.name}
+                        {p.uid === currentRoom.hostId && <Crown size={18} className="text-yellow-500 ml-auto" />}
+                      </li>
+                    ))}
+                    {currentRoom.teamA.players.length === 0 && (
+                      <li className="text-center text-slate-400 py-10 font-bold border-2 border-dashed border-slate-200 rounded-2xl">참여자를 기다립니다</li>
+                    )}
+                  </ul>
+                  {!currentRoom.teamA.players.some(p => p.uid === user.uid) && (
+                    <button onClick={() => joinRoom(currentRoom, 'teamA')} className="w-full mt-4 bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black transition-colors shadow-md shadow-red-500/20">
+                      이 팀으로 이동하기
+                    </button>
+                  )}
+                </div>
+
+                {/* Team B */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border-t-8 border-blue-500 flex flex-col">
+                  <h2 className="text-2xl font-black text-blue-600 mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
+                    <span>Team B (청팀)</span>
+                    <span className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-full">{currentRoom.teamB.players.length}명</span>
+                  </h2>
+                  <ul className="space-y-3 flex-1 overflow-y-auto min-h-[200px]">
+                    {currentRoom.teamB.players.map((p, idx) => (
+                      <li key={idx} className="bg-slate-50 p-4 rounded-2xl flex items-center gap-3 border border-slate-100 font-bold text-slate-700">
+                        <div className="bg-blue-200 text-blue-700 w-8 h-8 rounded-full flex items-center justify-center text-sm">{idx + 1}</div>
+                        {p.grade}-{p.classNum} {p.studentNum ? `${p.studentNum}번 ` : ''}{p.name}
+                        {p.uid === currentRoom.hostId && <Crown size={18} className="text-yellow-500 ml-auto" />}
+                      </li>
+                    ))}
+                    {currentRoom.teamB.players.length === 0 && (
+                      <li className="text-center text-slate-400 py-10 font-bold border-2 border-dashed border-slate-200 rounded-2xl">참여자를 기다립니다</li>
+                    )}
+                  </ul>
+                  {!currentRoom.teamB.players.some(p => p.uid === user.uid) && (
+                    <button onClick={() => joinRoom(currentRoom, 'teamB')} className="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl font-black transition-colors shadow-md shadow-blue-500/20">
+                      이 팀으로 이동하기
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-center bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+                {isHost ? (
+                  <button 
+                    onClick={startGame} 
+                    disabled={!canStart}
+                    className={`w-full max-w-md py-5 rounded-2xl font-black text-xl transition-all flex items-center justify-center gap-3 mx-auto
+                      ${canStart ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/30 hover:-translate-y-1' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                  >
+                    <Play fill="currentColor" size={24} /> {canStart ? '대결 시작하기!' : '양 팀에 최소 1명 이상 있어야 합니다.'}
+                  </button>
+                ) : (
+                  <div className="text-slate-500 font-bold flex items-center justify-center gap-3 text-lg py-5 bg-slate-50 rounded-2xl border border-slate-200">
+                    <Clock className="animate-spin text-blue-500" size={24} /> 
+                    방장이 게임을 시작하기를 기다리고 있습니다...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'game' && currentRoom) {
+        const isTeamA = currentRoom.teamA.players.some(p => p.uid === user.uid);
+        const myTeam = isTeamA ? 'A' : 'B';
+        const isMyTurn = currentRoom.turn === myTeam;
+        
+        const TimerBar = ({ startTime }) => {
+          const [progress, setProgress] = useState(100);
+          const [timeLeft, setTimeLeft] = useState(MAX_TIME_MS / 1000);
+
+          useEffect(() => {
+            const interval = setInterval(() => {
+              const elapsed = Date.now() - startTime;
+              const remaining = Math.max(0, MAX_TIME_MS - elapsed);
+              setProgress((remaining / MAX_TIME_MS) * 100);
+              setTimeLeft(Math.ceil(remaining / 1000));
+            }, 50);
+            return () => clearInterval(interval);
+          }, [startTime]);
+
+          return (
+            <div className="w-full mb-8">
+              <div className="flex justify-between text-sm mb-2 font-black">
+                <span className={timeLeft <= 5 ? 'text-red-500 animate-pulse text-lg' : 'text-slate-500'}>
+                  남은 시간: {timeLeft}초
+                </span>
+                <span className="text-blue-500 bg-blue-50 px-3 py-1 rounded-lg">빠를수록 고득점!</span>
+              </div>
+              <div className="h-6 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200 shadow-inner">
+                <div 
+                  className={`h-full transition-all duration-75 ease-linear rounded-full ${progress > 50 ? 'bg-emerald-400' : progress > 20 ? 'bg-amber-400' : 'bg-red-500'}`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <div className="min-h-screen bg-slate-100 flex flex-col">
+            <Toast />
+            <header className="bg-white border-b border-slate-200 p-4 shadow-sm z-10 sticky top-0">
+              <div className="max-w-6xl mx-auto flex justify-between items-center">
+                <div className={`flex-1 flex items-center gap-4 p-3 rounded-2xl border-2 transition-colors ${isTeamA ? 'border-red-400 bg-red-50' : 'border-transparent bg-slate-50'}`}>
+                  <div className="bg-red-500 text-white w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-md">A</div>
+                  <div>
+                    <div className="text-sm font-bold text-red-600 mb-0.5">홍팀 {isTeamA && '(나의 팀)'}</div>
+                    <div className="text-3xl font-black text-slate-800 leading-none">{currentRoom.teamA.score}</div>
+                  </div>
+                </div>
+                
+                <div className="px-8 text-center shrink-0">
+                  <div className="text-sm text-slate-400 font-black mb-2 tracking-widest bg-slate-100 inline-block px-3 py-1 rounded-full">
+                    Round {currentRoom.round} / {MAX_ROUNDS}
+                  </div>
+                  <div className="text-2xl font-black">
+                    {currentRoom.turn === 'A' ? 
+                      <span className="text-red-600 bg-red-50 px-4 py-1 rounded-xl">홍팀 공격!</span> : 
+                      <span className="text-blue-600 bg-blue-50 px-4 py-1 rounded-xl">청팀 공격!</span>}
+                  </div>
+                </div>
+
+                <div className={`flex-1 flex items-center justify-end gap-4 p-3 rounded-2xl border-2 transition-colors ${!isTeamA ? 'border-blue-400 bg-blue-50' : 'border-transparent bg-slate-50'}`}>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-blue-600 mb-0.5">청팀 {!isTeamA && '(나의 팀)'}</div>
+                    <div className="text-3xl font-black text-slate-800 leading-none">{currentRoom.teamB.score}</div>
+                  </div>
+                  <div className="bg-blue-500 text-white w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-md">B</div>
+                </div>
+              </div>
+            </header>
+
+            <main className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-5xl mx-auto">
+              {!currentRoom.currentAttack ? (
+                isMyTurn ? (
+                  <div className="w-full bg-white p-8 rounded-3xl shadow-xl border border-slate-200">
+                    <div className="text-center mb-8">
+                      <span className="inline-block bg-indigo-100 text-indigo-700 px-4 py-1 rounded-full font-black mb-4">공격 턴</span>
+                      <h2 className="text-3xl font-black text-slate-800">
+                        상대팀을 공격할 문장을 고르세요!
+                      </h2>
+                      <p className="text-slate-500 font-bold mt-2">어려운 문장을 선택해서 점수를 획득하세요.</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto p-2">
+                      {SENTENCES.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => executeAttack(s)}
+                          className="bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-400 p-5 rounded-2xl text-left transition-all group flex flex-col justify-between min-h-[120px]"
+                        >
+                          <div className="font-black text-slate-700 text-lg group-hover:text-blue-700 leading-tight">{s.ko}</div>
+                          <div className="text-sm font-bold text-slate-400 mt-4 group-hover:text-blue-500 line-clamp-1">
+                            {s.en}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center bg-white p-12 rounded-3xl shadow-xl border border-slate-200 w-full max-w-2xl">
+                    <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Shield size={48} className="text-slate-400 animate-pulse" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-800 mb-4">방어 준비!</h2>
+                    <p className="text-xl text-slate-500 font-bold">상대팀이 공격 문장을 고르고 있습니다...</p>
+                    <p className="text-slate-400 mt-2">손가락을 풀고 키보드를 준비하세요.</p>
+                  </div>
+                )
+              ) : (
+                <div className="w-full max-w-4xl bg-white p-10 md:p-14 rounded-[2.5rem] shadow-2xl border-4 border-indigo-100 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+                  
+                  <div className="text-center">
+                    <div className="inline-block bg-slate-100 px-6 py-2 rounded-full font-black text-slate-500 tracking-widest text-sm mb-6 uppercase">
+                      {isMyTurn ? '우리의 공격' : '적의 공격을 타이핑으로 막아라!'}
+                    </div>
+                    
+                    <h2 className="text-3xl md:text-5xl font-black text-slate-800 mb-10 leading-tight break-keep">
+                      "{currentRoom.currentAttack.ko}"
+                    </h2>
+
+                    <TimerBar startTime={currentRoom.currentAttack.startTime} />
+
+                    {!isMyTurn ? (
+                      <div className="mt-8">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="이곳을 클릭하고 영어 문장을 입력하세요!"
+                          onChange={handleDefenseInput}
+                          className="w-full bg-slate-50 border-4 border-slate-200 rounded-2xl p-6 text-2xl text-center font-black focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner text-slate-800 placeholder-slate-300"
+                          autoComplete="off"
+                          spellCheck="false"
+                        />
+                        <p className="text-slate-400 font-bold mt-4 flex items-center justify-center gap-2">
+                          <AlertCircle size={18}/> 대소문자는 상관없지만, 띄어쓰기와 마침표는 정확해야 합니다.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="mt-8 p-8 bg-indigo-50 rounded-2xl border-2 border-indigo-100">
+                        <p className="text-indigo-800 font-black mb-3">상대팀이 입력해야 할 정답</p>
+                        <p className="text-2xl font-bold text-indigo-600">{currentRoom.currentAttack.en}</p>
+                        <div className="mt-6 flex items-center justify-center gap-2 font-bold text-indigo-400">
+                          <Clock className="animate-spin" size={20} /> 상대팀의 방어를 지켜보는 중...
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </main>
+          </div>
+        );
+      }
+
+      if (view === 'leaderboard') {
+        const [filterMode, setFilterMode] = useState('all');
+        const [filterGrade, setFilterGrade] = useState('all');
+        const [filterClass, setFilterClass] = useState('all');
+        
+        const filteredData = leaderboardData.filter(d => {
+          if (filterMode !== 'all' && d.mode !== filterMode) return false;
+          if (filterGrade !== 'all' && d.grade !== filterGrade) return false;
+          if (filterClass !== 'all' && String(d.classNum) !== String(filterClass)) return false;
+          return true;
+        }).sort((a, b) => {
+          const maxA = Math.max(a.teamA_score || 0, a.teamB_score || 0);
+          const maxB = Math.max(b.teamA_score || 0, b.teamB_score || 0);
+          return maxB - maxA;
+        });
+
+        return (
+          <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
+                  <span className="bg-emerald-100 p-3 rounded-2xl"><Trophy className="text-emerald-600" size={32} /></span>
+                  순위 확인
+                </h1>
+                <button onClick={() => setView('home')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-colors">
+                  <ArrowLeft size={20} /> 홈으로 돌아가기
+                </button>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <div className="flex-1">
+                  <label className="block text-sm font-black text-slate-500 mb-2">대결 방식</label>
+                  <select 
+                    value={filterMode} 
+                    onChange={(e) => setFilterMode(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
+                  >
+                    <option value="all">전체보기</option>
+                    <option value="1v1">1:1 대결</option>
+                    <option value="team">팀 대결</option>
+                    <option value="class">학급 대결</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-black text-slate-500 mb-2">학년</label>
+                  <select 
+                    value={filterGrade} 
+                    onChange={(e) => setFilterGrade(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
+                  >
+                    <option value="all">전체 학년</option>
+                    {[1,2,3,4,5,6].map(g => <option key={g} value={String(g)}>{g}학년</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-black text-slate-500 mb-2">반</label>
+                  <select 
+                    value={filterClass} 
+                    onChange={(e) => setFilterClass(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
+                  >
+                    <option value="all">전체 반</option>
+                    {Array.from({length: 20}, (_, i) => i + 1).map(c => <option key={c} value={String(c)}>{c}반</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {filteredData.length === 0 ? (
+                  <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                    <Trophy size={64} className="text-slate-300 mx-auto mb-4" />
+                    <p className="text-xl font-bold text-slate-500">조건에 맞는 기록이 없습니다.</p>
+                    <p className="text-slate-400 mt-2">게임을 플레이하고 첫 번째 순위의 주인공이 되어보세요!</p>
+                  </div>
+                ) : (
+                  filteredData.map((record, index) => {
+                    const isAWinner = record.teamA_score >= record.teamB_score;
+                    const winScore = isAWinner ? record.teamA_score : record.teamB_score;
+                    const loseScore = isAWinner ? record.teamB_score : record.teamA_score;
+                    const winPlayers = isAWinner ? record.playersA : record.playersB;
+                    const losePlayers = isAWinner ? record.playersB : record.playersA;
+                    
+                    return (
+                      <div key={record.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-6 hover:shadow-md transition-shadow">
+                        <div className="w-16 flex justify-center shrink-0">
+                          {index === 0 ? <div className="bg-yellow-100 p-3 rounded-2xl"><Medal size={40} className="text-yellow-500" /></div> :
+                           index === 1 ? <div className="bg-slate-100 p-3 rounded-2xl"><Medal size={36} className="text-slate-400" /></div> :
+                           index === 2 ? <div className="bg-amber-100 p-3 rounded-2xl"><Medal size={32} className="text-amber-600" /></div> :
+                           <span className="text-3xl font-black text-slate-300">{index + 1}</span>}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className={`px-2 py-1 text-xs rounded-lg font-black text-white
+                              ${record.mode === '1v1' ? 'bg-blue-500' : record.mode === 'team' ? 'bg-emerald-500' : 'bg-purple-500'}`}>
+                              {record.mode === '1v1' ? '1:1' : record.mode === 'team' ? '팀전' : '학급전'}
+                            </span>
+                            <span className="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                              {record.grade}학년 {record.classNum}반
+                            </span>
+                            <span className="text-xs font-bold text-slate-400">
+                              {new Date(record.timestamp).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="font-black text-xl text-slate-800 truncate">
+                            <span className="text-emerald-500 mr-2">WIN</span>
+                            {winPlayers || '알 수 없음'}
+                          </div>
+                          {losePlayers && (
+                            <div className="text-sm font-bold text-slate-400 truncate mt-1">
+                              vs {losePlayers}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-3xl font-black text-blue-600">{winScore} <span className="text-sm font-bold text-blue-400">pts</span></div>
+                          {loseScore > 0 && <div className="text-sm font-bold text-slate-400">{loseScore} pts</div>}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    }
+
+    const root = ReactDOMClient.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
