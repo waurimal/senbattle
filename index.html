@@ -134,6 +134,28 @@
         setTimeout(() => setToastMessage(''), 3000);
       };
 
+      // 🔥 추가된 부분: 앱 실행 시 자동으로 익명 로그인(인증)을 처리하는 코드
+      useEffect(() => {
+        if (!auth) return;
+        const initAuth = async () => {
+          try {
+            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+              await signInWithCustomToken(auth, window.__initial_auth_token);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (error) {
+            console.error("인증 에러:", error);
+          }
+        };
+        initAuth();
+
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+          setUser(currentUser);
+        });
+        return () => unsubscribe();
+      }, []);
+
       useEffect(() => {
         if (!user || (view !== 'lobby' && view !== 'leaderboard' && view !== 'teacher')) return;
 
