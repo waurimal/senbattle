@@ -18,7 +18,17 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- 모듈 로딩 실패 또는 로컬(file://) 실행 시 보여질 경고 화면 -->
+    <div style="font-family: 'Pretendard', sans-serif; text-align: center; padding: 50px; margin-top: 10vh; color: #333;">
+      <h1 style="color: #ef4444; font-size: 2rem; margin-bottom: 20px;">⚠️ 화면이 보이지 않나요?</h1>
+      <p style="font-size: 1.1rem; line-height: 1.8; color: #475569; background: #f8fafc; padding: 30px; border-radius: 20px; display: inline-block; text-align: left; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+        1. 이 파일은 <b>보안 정책(CORS)</b> 때문에 내 컴퓨터에서 더블클릭해서(<code>file:///...</code>) 열면 작동하지 않습니다.<br>
+        2. 코드를 <b>GitHub Pages</b>에 업로드한 뒤 생성된 웹사이트 링크로 접속해주세요.<br>
+        3. <b>index.html</b> 코드 내부에 선생님의 <b>Firebase 설정(myFirebaseConfig)</b>을 정확히 입력했는지 확인해주세요.
+      </p>
+    </div>
+  </div>
 
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
@@ -29,8 +39,8 @@
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
     import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, deleteDoc, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-    // 🔥 선생님의 Firebase 프로젝트 설정으로 아래 값을 변경하세요! 🔥
-    // Firebase 콘솔 -> 프로젝트 설정 -> 웹 앱 추가 시 나오는 설정값 복사
+    // 🔥 선생님의 Firebase 프로젝트 설정 🔥
+    const myFirebaseConfig = {
       apiKey: "AIzaSyAqGKmnWbqkmxAhe0M9jlln4YjhhKb46oM",
       authDomain: "senbattle-494ac.firebaseapp.com",
       projectId: "senbattle-494ac",
@@ -44,37 +54,30 @@
     const isImmersive = typeof window.__firebase_config !== 'undefined';
     const activeConfig = isImmersive ? JSON.parse(window.__firebase_config) : myFirebaseConfig;
 
-    // Firebase 설정이 안 되어 있을 경우 경고 화면 출력 (깃허브 업로드 시)
-    if (!isImmersive && activeConfig.apiKey === "YOUR_API_KEY") {
-        const SetupWarning = () => (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-                <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl border-t-8 border-red-500">
-                   <h1 className="text-3xl font-black text-red-500 mb-6 flex items-center justify-center gap-3"><AlertCircle size={36}/> Firebase 설정 필요!</h1>
-                   <p className="text-slate-600 text-lg mb-6 leading-relaxed">
-                     이 게임을 선생님의 GitHub Pages에서 실행하려면 <br/>
-                     <b>index.html</b> 파일 내부의 <code className="bg-slate-100 px-3 py-1 rounded-lg text-red-500 font-mono text-sm">myFirebaseConfig</code> 부분을 <br/>
-                     선생님의 Firebase 프로젝트 설정값으로 변경해야 합니다.
-                   </p>
-                   <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm font-bold text-left mb-6">
-                     💡 팁: Firebase 콘솔 &gt; 프로젝트 추가 &gt; 웹 앱(&lt;/&gt;) 추가 후 나타나는 config 코드를 복사하세요. <br/>
-                     (반드시 빌드(Firestore Database)를 생성하고 규칙을 테스트 모드로 설정해야 합니다.)
-                   </div>
-                </div>
-            </div>
-        );
-        const root = ReactDOMClient.createRoot(document.getElementById('root'));
-        root.render(<SetupWarning />);
-        throw new Error("Firebase config is required");
+    const isMissingConfig = !isImmersive && activeConfig.apiKey === "YOUR_API_KEY";
+
+    // Firebase 초기화 시 에러 방지 처리
+    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'sentence-battle-app';
+    let app, auth, db;
+    try {
+      app = !isMissingConfig ? initializeApp(activeConfig) : null;
+      auth = !isMissingConfig ? getAuth(app) : null;
+      db = !isMissingConfig ? getFirestore(app) : null;
+    } catch (e) {
+      console.error("Firebase Init Error:", e);
+      alert("Firebase 초기화 오류 발생: " + e.message);
     }
 
-    // Firebase 초기화
-    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'sentence-battle-app';
-    const app = initializeApp(activeConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    const getPublicPath = (collectionName) => collection(db, 'artifacts', appId, 'public', 'data', collectionName);
-    const getPublicDocPath = (collectionName, docId) => doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId);
+    // 🔥 핵심 수정: 선생님의 깃허브(실제 환경)에서는 최상위 컬렉션을 사용하도록 분기 처리
+    const getPublicPath = (collectionName) => {
+      if (isImmersive) return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+      return collection(db, collectionName); // 깃허브에서는 최상위 rooms, leaderboards 컬렉션 사용
+    };
+    
+    const getPublicDocPath = (collectionName, docId) => {
+      if (isImmersive) return doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId);
+      return doc(db, collectionName, docId); // 깃허브용 경로
+    };
 
     const SENTENCES = [
       { id: 1, ko: "그것은 식은 죽 먹기다.", en: "It is a piece of cake." },
@@ -131,13 +134,14 @@
             }
           } catch (error) {
             console.error("Auth error:", error);
+            alert(`로그인 실패! Firebase 콘솔에서 '익명 로그인'을 사용 설정했는지 확인해주세요.\n(상세 에러: ${error.message})`);
           }
         };
-        initAuth();
+        if (auth) initAuth();
 
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        const unsubscribe = auth ? onAuthStateChanged(auth, (currentUser) => {
           setUser(currentUser);
-        });
+        }) : () => {};
         return () => unsubscribe();
       }, []);
 
@@ -148,7 +152,10 @@
           const roomList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           const activeRooms = roomList.filter(r => r.status !== 'finished');
           setRooms(activeRooms);
-        }, (error) => console.error("Rooms fetch error:", error));
+        }, (error) => {
+          console.error("Rooms fetch error:", error);
+          alert("데이터베이스 권한 오류! Firebase Firestore의 '규칙'을 테스트 모드(allow read, write: if true;)로 변경해주세요.");
+        });
 
         const unsubscribeLeaderboard = onSnapshot(getPublicPath('leaderboards'), (snapshot) => {
           const lbList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1025,7 +1032,29 @@
     }
 
     const root = ReactDOMClient.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    
+    // API 키 미입력 시, 앱 크래쉬 대신 친절한 경고창 렌더링
+    if (isMissingConfig) {
+        const SetupWarning = () => (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center font-sans">
+                <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl border-t-8 border-red-500">
+                   <h1 className="text-3xl font-black text-red-500 mb-6 flex items-center justify-center gap-3"><AlertCircle size={36}/> Firebase 설정 필요!</h1>
+                   <p className="text-slate-600 text-lg mb-6 leading-relaxed">
+                     이 게임을 선생님의 GitHub Pages에서 실행하려면 <br/>
+                     <b>index.html</b> 파일 내부의 <code className="bg-slate-100 px-3 py-1 rounded-lg text-red-500 font-mono text-sm">myFirebaseConfig</code> 부분을 <br/>
+                     선생님의 Firebase 프로젝트 설정값으로 변경해야 합니다.
+                   </p>
+                   <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm font-bold text-left mb-6">
+                     💡 팁: Firebase 콘솔 &gt; 프로젝트 추가 &gt; 웹 앱(&lt;/&gt;) 추가 후 나타나는 config 코드를 복사하세요. <br/>
+                     (반드시 빌드(Firestore Database)를 생성하고 규칙을 테스트 모드로 설정해야 합니다.)
+                   </div>
+                </div>
+            </div>
+        );
+        root.render(<SetupWarning />);
+    } else {
+        root.render(<App />);
+    }
   </script>
 </body>
 </html>
