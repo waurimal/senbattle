@@ -33,7 +33,7 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
     import * as ReactDOMClient from 'https://esm.sh/react-dom@18.2.0/client';
-    import { Trophy, Swords, Shield, Users, User, ArrowLeft, Play, Clock, Medal, Crown, Settings, LogOut, CheckCircle2, AlertCircle } from 'https://esm.sh/lucide-react@0.294.0';
+    import { Trophy, Swords, Shield, Users, User, ArrowLeft, Play, Clock, Medal, Crown, Settings, LogOut, CheckCircle2, AlertCircle, Plus, Trash2, Save, Edit3 } from 'https://esm.sh/lucide-react@0.294.0';
 
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
@@ -119,34 +119,23 @@
       const [joinCode, setJoinCode] = useState('');
       const [selectedRoomToJoin, setSelectedRoomToJoin] = useState(null);
 
+      // 교사 모드 및 단원 관리용 상태
+      const [isTeacherApprove, setIsTeacherApprove] = useState(false);
+      const [teacherPassword, setTeacherPassword] = useState('');
+      const [units, setUnits] = useState([]);
+      const [selectedUnitId, setSelectedUnitId] = useState('default');
+      const [editingUnit, setEditingUnit] = useState(null);
+      
+      // 게임 방어 입력 상태
+      const [defenseInput, setDefenseInput] = useState('');
+
       const showToast = (msg) => {
         setToastMessage(msg);
         setTimeout(() => setToastMessage(''), 3000);
       };
 
       useEffect(() => {
-        const initAuth = async () => {
-          try {
-            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-              await signInWithCustomToken(auth, window.__initial_auth_token);
-            } else {
-              await signInAnonymously(auth);
-            }
-          } catch (error) {
-            console.error("Auth error:", error);
-            alert(`로그인 실패! Firebase 콘솔에서 '익명 로그인'을 사용 설정했는지 확인해주세요.\n(상세 에러: ${error.message})`);
-          }
-        };
-        if (auth) initAuth();
-
-        const unsubscribe = auth ? onAuthStateChanged(auth, (currentUser) => {
-          setUser(currentUser);
-        }) : () => {};
-        return () => unsubscribe();
-      }, []);
-
-      useEffect(() => {
-        if (!user || (view !== 'lobby' && view !== 'leaderboard')) return;
+        if (!user || (view !== 'lobby' && view !== 'leaderboard' && view !== 'teacher')) return;
 
         const unsubscribeRooms = onSnapshot(getPublicPath('rooms'), (snapshot) => {
           const roomList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -162,9 +151,15 @@
           setLeaderboardData(lbList);
         }, (error) => console.error("Leaderboard fetch error:", error));
 
+        const unsubscribeUnits = onSnapshot(getPublicPath('units'), (snapshot) => {
+          const unitList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.createdAt - b.createdAt);
+          setUnits(unitList);
+        }, (error) => console.error("Units fetch error:", error));
+
         return () => {
           unsubscribeRooms();
           unsubscribeLeaderboard();
+          unsubscribeUnits();
         };
       }, [user, view]);
 
@@ -176,10 +171,10 @@
             const roomData = { id: docSnap.id, ...docSnap.data() };
             setCurrentRoom(roomData);
             if (roomData.status === 'playing' && view === 'room') setView('game');
-            if (roomData.status === 'finished' && view === 'game') setView('lobby');
+            if (roomData.status === 'finished' && view === 'game') setView('result');
           } else {
             setCurrentRoom(null);
-            if (view === 'room' || view === 'game') setView('lobby');
+            if (view === 'room' || view === 'game' || view === 'result') setView('lobby');
           }
         });
 
@@ -202,11 +197,19 @@
       const createRoom = async (mode) => {
         if (!user) return;
         const code = generateRoomCode();
+        
+        // 선택된 단원의 문장 가져오기
+        const selectedUnitData = units.find(u => u.id === selectedUnitId);
+        const roomSentences = selectedUnitData && selectedUnitData.sentences.length > 0 ? selectedUnitData.sentences : SENTENCES;
+        const unitName = selectedUnitData ? selectedUnitData.name : '기본 단원';
+
         const newRoomRef = doc(getPublicPath('rooms'));
         const roomData = {
           hostId: user.uid,
           roomCode: code,
           mode: mode, // '1v1', 'team', 'class'
+          unitName: unitName,
+          sentences: roomSentences,
           status: 'waiting',
           turn: 'A',
           round: 1,
@@ -299,7 +302,7 @@
         const roomRef = getPublicDocPath('rooms', currentRoom.id);
         await updateDoc(roomRef, {
           currentAttack: {
-            id: sentence.id,
+            id: sentence.id || Date.now(),
             ko: sentence.ko,
             en: sentence.en,
             startTime: Date.now()
@@ -307,40 +310,44 @@
         });
       };
 
-      const handleDefenseInput = async (e) => {
-        const val = e.target.value;
+      const handleDefenseSubmit = async (e) => {
+        if (e.key !== 'Enter') return;
+        
+        const val = defenseInput;
         if (!currentRoom?.currentAttack) return;
         
         const targetEn = currentRoom.currentAttack.en;
+        setDefenseInput(''); // 항상 입력창 초기화 (오답이든 정답이든 다음 턴 진행)
         
+        let points = 0;
         // 정답 체크 (대소문자 무시, 공백 및 특수기호 정상화)
         if (val.trim().toLowerCase() === targetEn.trim().toLowerCase()) {
-          e.target.value = ''; // 입력창 초기화
-          
           const timeTaken = Date.now() - currentRoom.currentAttack.startTime;
-          let points = Math.max(10, Math.floor(((MAX_TIME_MS - timeTaken) / MAX_TIME_MS) * 100));
+          points = Math.max(10, Math.floor(((MAX_TIME_MS - timeTaken) / MAX_TIME_MS) * 100));
           if (timeTaken > MAX_TIME_MS) points = 10;
           
-          const isTeamA = currentRoom.teamA.players.some(p => p.uid === user.uid);
-          const myTeam = isTeamA ? 'teamA' : 'teamB';
-          const newScore = currentRoom[myTeam].score + points;
-          const nextTurn = currentRoom.turn === 'A' ? 'B' : 'A';
-          const nextRound = currentRoom.turn === 'B' ? currentRoom.round + 1 : currentRoom.round;
-          
-          const roomRef = getPublicDocPath('rooms', currentRoom.id);
-          
           showToast(`${profile.name}님이 정답을 맞췄습니다! (+${points}점)`);
+        } else {
+          showToast(`${profile.name}님의 오답! 턴이 넘어갑니다. (0점)`);
+        }
 
-          if (nextRound > MAX_ROUNDS) {
-            await finishGame(roomRef, currentRoom, myTeam, newScore);
-          } else {
-            await updateDoc(roomRef, {
-              currentAttack: null,
-              [`${myTeam}.score`]: newScore,
-              turn: nextTurn,
-              round: nextRound
-            });
-          }
+        const isTeamA = currentRoom.teamA.players.some(p => p.uid === user.uid);
+        const myTeam = isTeamA ? 'teamA' : 'teamB';
+        const newScore = currentRoom[myTeam].score + points;
+        const nextTurn = currentRoom.turn === 'A' ? 'B' : 'A';
+        const nextRound = currentRoom.turn === 'B' ? currentRoom.round + 1 : currentRoom.round;
+        
+        const roomRef = getPublicDocPath('rooms', currentRoom.id);
+
+        if (nextRound > MAX_ROUNDS) {
+          await finishGame(roomRef, currentRoom, myTeam, newScore);
+        } else {
+          await updateDoc(roomRef, {
+            currentAttack: null,
+            [`${myTeam}.score`]: newScore,
+            turn: nextTurn,
+            round: nextRound
+          });
         }
       };
 
@@ -368,9 +375,7 @@
           playersB: roomData.teamB.players.map(p => p.name).join(', ')
         });
 
-        setCurrentRoom(null);
-        setView('lobby');
-        showToast("게임이 종료되었습니다. 순위표를 확인해보세요!");
+        // 상태를 'finished'로 업데이트하면 useEffect가 감지하여 자동으로 'result' 화면으로 넘어갑니다.
       };
 
       useEffect(() => {
@@ -448,22 +453,179 @@
       }
 
       if (view === 'teacher') {
-        return (
-          <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-800">
-            <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-              <div className="flex justify-center mb-6 text-slate-400">
-                <Shield size={48} />
+        if (!isTeacherApprove) {
+          return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-800">
+              <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+                <div className="flex justify-center mb-6 text-slate-400">
+                  <Shield size={48} />
+                </div>
+                <h2 className="text-2xl font-black text-center mb-6">교사 인증</h2>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (teacherPassword === '1234') {
+                    setIsTeacherApprove(true);
+                    showToast("교사 모드 접속 성공!");
+                  } else {
+                    showToast("비밀번호가 틀렸습니다.");
+                  }
+                }} className="space-y-4 mb-8">
+                  <input 
+                    type="password" 
+                    value={teacherPassword}
+                    onChange={(e) => setTeacherPassword(e.target.value)}
+                    placeholder="비밀번호 입력 후 Enter" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-center focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                  />
+                  <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-xl transition-colors">
+                    인증하기
+                  </button>
+                </form>
+                <div className="flex justify-between items-center text-sm font-bold text-slate-500">
+                  <button onClick={() => setView('home')} className="flex items-center gap-1 hover:text-blue-600"><ArrowLeft size={16}/> 뒤로</button>
+                  <span className="text-slate-400">초기비밀번호: 1234</span>
+                </div>
               </div>
-              <h2 className="text-2xl font-black text-center mb-6">교사 인증</h2>
-              <div className="space-y-4 mb-8">
-                <input type="password" placeholder="비밀번호" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-center focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" />
-                <button className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-xl transition-colors">
-                  인증하기
+            </div>
+          );
+        }
+
+        const handleAddUnit = async () => {
+          const newRef = doc(getPublicPath('units'));
+          await setDoc(newRef, {
+            name: '새로운 단원',
+            sentences: [{ id: Date.now(), ko: '', en: '' }],
+            createdAt: Date.now()
+          });
+          showToast("새 단원이 생성되었습니다.");
+        };
+
+        const handleDeleteUnit = async (unitId) => {
+          await deleteDoc(doc(getPublicPath('units'), unitId));
+          if(editingUnit?.id === unitId) setEditingUnit(null);
+          showToast("단원이 삭제되었습니다.");
+        };
+
+        const handleSaveUnit = async () => {
+          if (!editingUnit) return;
+          // 빈 문장 필터링
+          const validSentences = editingUnit.sentences.filter(s => s.ko.trim() !== '' && s.en.trim() !== '');
+          await updateDoc(doc(getPublicPath('units'), editingUnit.id), {
+            name: editingUnit.name,
+            sentences: validSentences
+          });
+          showToast("단원 설정이 저장되었습니다.");
+        };
+
+        return (
+          <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
+            <Toast />
+            <div className="max-w-6xl mx-auto w-full">
+              <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
+                  <span className="bg-slate-800 p-3 rounded-2xl"><Settings className="text-white" size={32} /></span>
+                  교사 모드 (단원 및 문장 관리)
+                </h1>
+                <button onClick={() => setView('home')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-colors">
+                  <ArrowLeft size={20} /> 홈으로
                 </button>
               </div>
-              <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                <button onClick={() => setView('home')} className="flex items-center gap-1 hover:text-blue-600"><ArrowLeft size={16}/> 뒤로</button>
-                <button className="hover:text-blue-600 underline">비밀번호 초기화</button>
+
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* 단원 목록 */}
+                <div className="w-full md:w-1/3 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col h-[70vh]">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-black flex items-center gap-2"><Edit3 size={24} className="text-blue-500"/> 학습 단원 목록</h2>
+                    <button onClick={handleAddUnit} className="bg-blue-100 text-blue-600 hover:bg-blue-200 p-2 rounded-xl transition-colors shadow-sm">
+                      <Plus size={20} />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                    {units.map(u => (
+                      <div key={u.id} className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${editingUnit?.id === u.id ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:border-blue-200'}`} onClick={() => setEditingUnit(u)}>
+                        <span className="font-bold text-slate-700">{u.name} <span className="text-sm font-normal text-slate-400">({u.sentences?.length || 0}문장)</span></span>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteUnit(u.id); }} className="text-red-400 hover:text-red-600 p-2">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    ))}
+                    {units.length === 0 && <p className="text-center text-slate-400 py-10 font-bold">생성된 단원이 없습니다.</p>}
+                  </div>
+                </div>
+
+                {/* 문장 편집 */}
+                <div className="w-full md:w-2/3 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col h-[70vh]">
+                  {editingUnit ? (
+                    <>
+                      <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-6">
+                        <input 
+                          value={editingUnit.name} 
+                          onChange={e => setEditingUnit({...editingUnit, name: e.target.value})}
+                          className="text-2xl font-black bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl focus:outline-none focus:border-blue-500 w-1/2"
+                          placeholder="단원명 입력"
+                        />
+                        <button onClick={handleSaveUnit} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 transition-colors shadow-md shadow-blue-500/20">
+                          <Save size={20} /> 단원 저장하기
+                        </button>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                        {editingUnit.sentences.map((s, idx) => (
+                          <div key={s.id || idx} className="flex flex-col gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-200 relative group">
+                            <div className="flex items-center gap-3">
+                              <span className="bg-slate-200 text-slate-500 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0">{idx + 1}</span>
+                              <input 
+                                value={s.ko} 
+                                onChange={(e) => {
+                                  const newS = [...editingUnit.sentences];
+                                  newS[idx].ko = e.target.value;
+                                  setEditingUnit({...editingUnit, sentences: newS});
+                                }}
+                                className="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-700"
+                                placeholder="한국어 뜻 입력 (예: 나는 피아노 치는 것을 좋아한다.)"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3 pl-11">
+                              <input 
+                                value={s.en} 
+                                onChange={(e) => {
+                                  const newS = [...editingUnit.sentences];
+                                  newS[idx].en = e.target.value;
+                                  setEditingUnit({...editingUnit, sentences: newS});
+                                }}
+                                className="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-emerald-600"
+                                placeholder="영어 문장 입력 (예: I like playing the piano.)"
+                              />
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const newS = editingUnit.sentences.filter((_, i) => i !== idx);
+                                setEditingUnit({...editingUnit, sentences: newS});
+                              }}
+                              className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <button 
+                        onClick={() => {
+                          setEditingUnit({...editingUnit, sentences: [...editingUnit.sentences, { id: Date.now(), ko: '', en: '' }]});
+                        }}
+                        className="mt-6 w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black rounded-2xl flex items-center justify-center gap-2 transition-colors border border-slate-200 border-dashed"
+                      >
+                        <Plus size={20} /> 새 문장 칸 추가하기
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                      <Edit3 size={64} className="mb-4 text-slate-200" />
+                      <p className="text-xl font-bold">좌측에서 편집할 단원을 선택하거나 새로 추가해주세요.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -545,6 +707,19 @@
                     <span className="w-2 h-6 bg-blue-500 rounded-full inline-block"></span>
                     새로운 방 만들기
                   </h2>
+                  <div className="mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <label className="block text-sm font-bold text-slate-500 mb-2">학습할 단원 선택</label>
+                    <select 
+                      value={selectedUnitId} 
+                      onChange={(e) => setSelectedUnitId(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
+                    >
+                      <option value="default">기본 문장 (전체)</option>
+                      {units.map(u => (
+                        <option key={u.id} value={u.id}>{u.name} ({u.sentences?.length || 0}문장)</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex flex-col gap-4">
                     <button onClick={() => createRoom('1v1')} className="bg-slate-50 hover:bg-blue-50 hover:border-blue-300 border-2 border-slate-100 p-5 rounded-2xl transition-all text-left flex items-center gap-4 group">
                       <div className="bg-blue-100 w-12 h-12 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -825,12 +1000,13 @@
                         상대팀을 공격할 문장을 고르세요!
                       </h2>
                       <p className="text-slate-500 font-bold mt-2">어려운 문장을 선택해서 점수를 획득하세요.</p>
+                      <p className="text-indigo-500 font-black mt-1 bg-indigo-50 inline-block px-3 py-1 rounded-full text-sm">현재 단원: {currentRoom.unitName || '기본 단원'}</p>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto p-2">
-                      {SENTENCES.map((s) => (
+                      {(currentRoom.sentences || SENTENCES).map((s, index) => (
                         <button
-                          key={s.id}
+                          key={s.id || index}
                           onClick={() => executeAttack(s)}
                           className="bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-400 p-5 rounded-2xl text-left transition-all group flex flex-col justify-between min-h-[120px]"
                         >
@@ -872,14 +1048,16 @@
                         <input
                           type="text"
                           autoFocus
-                          placeholder="이곳을 클릭하고 영어 문장을 입력하세요!"
-                          onChange={handleDefenseInput}
+                          placeholder="이곳을 클릭하고 영어 문장을 입력 후 Enter!"
+                          value={defenseInput}
+                          onChange={(e) => setDefenseInput(e.target.value)}
+                          onKeyDown={handleDefenseSubmit}
                           className="w-full bg-slate-50 border-4 border-slate-200 rounded-2xl p-6 text-2xl text-center font-black focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner text-slate-800 placeholder-slate-300"
                           autoComplete="off"
                           spellCheck="false"
                         />
                         <p className="text-slate-400 font-bold mt-4 flex items-center justify-center gap-2">
-                          <AlertCircle size={18}/> 대소문자는 상관없지만, 띄어쓰기와 마침표는 정확해야 합니다.
+                          <AlertCircle size={18}/> 오타가 있어도 Enter를 누르면 제출되며 턴이 넘어갑니다.
                         </p>
                       </div>
                     ) : (
@@ -895,6 +1073,58 @@
                 </div>
               )}
             </main>
+          </div>
+        );
+      }
+
+      if (view === 'result' && currentRoom) {
+        const scoreA = currentRoom.teamA.score;
+        const scoreB = currentRoom.teamB.score;
+        const isDraw = scoreA === scoreB;
+        const winTeam = scoreA > scoreB ? 'Team A (홍팀)' : 'Team B (청팀)';
+        const winColor = scoreA > scoreB ? 'text-red-500' : 'text-blue-500';
+
+        const exitTo = async (target) => {
+          await leaveRoom();
+          setView(target);
+        };
+
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-800">
+            <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-100 text-center animate-in zoom-in duration-500">
+              <Trophy size={80} className="mx-auto text-yellow-500 mb-6 drop-shadow-md" />
+              <h1 className="text-4xl font-black mb-2 text-slate-800">게임 종료!</h1>
+              
+              {isDraw ? (
+                <h2 className="text-2xl font-bold text-slate-500 mb-8 bg-slate-100 inline-block px-6 py-2 rounded-full">무승부입니다!</h2>
+              ) : (
+                <h2 className={`text-3xl font-black ${winColor} mb-8 bg-slate-50 inline-block px-6 py-2 rounded-full border border-slate-100`}>
+                  {winTeam} 승리!
+                </h2>
+              )}
+
+              <div className="flex justify-center gap-6 md:gap-12 mb-12">
+                <div className="bg-red-50 p-6 rounded-3xl border-4 border-red-100 w-40 md:w-48 shadow-sm relative">
+                  {scoreA > scoreB && <Crown size={32} className="text-yellow-500 absolute -top-5 left-1/2 transform -translate-x-1/2 drop-shadow-sm" />}
+                  <div className="text-red-600 font-black mb-2 text-lg">Team A (홍팀)</div>
+                  <div className="text-5xl font-black text-slate-800">{scoreA}</div>
+                </div>
+                <div className="bg-blue-50 p-6 rounded-3xl border-4 border-blue-100 w-40 md:w-48 shadow-sm relative">
+                  {scoreB > scoreA && <Crown size={32} className="text-yellow-500 absolute -top-5 left-1/2 transform -translate-x-1/2 drop-shadow-sm" />}
+                  <div className="text-blue-600 font-black mb-2 text-lg">Team B (청팀)</div>
+                  <div className="text-5xl font-black text-slate-800">{scoreB}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onClick={() => exitTo('leaderboard')} className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md shadow-emerald-500/20 hover:-translate-y-1">
+                  순위표 보기
+                </button>
+                <button onClick={() => exitTo('lobby')} className="flex-1 sm:flex-none bg-slate-200 hover:bg-slate-300 text-slate-700 px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md hover:-translate-y-1">
+                  대기실로 돌아가기
+                </button>
+              </div>
+            </div>
           </div>
         );
       }
