@@ -483,21 +483,21 @@
         );
       };
 
+      const Footer = () => (
+        <footer className="w-full text-center py-8 text-slate-400 text-sm font-bold mt-auto">
+          <p>만든이: 곽현석(이의초등학교)</p>
+          <p className="mt-1">Copyright &copy; 2026 Eui Elementary School. All Rights Reserved.</p>
+        </footer>
+      );
+
       if (view === 'home') {
         return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-800">
+          <div className="min-h-screen bg-slate-50 flex flex-col p-6 text-slate-800">
             <Toast />
-            <div className="w-full max-w-md">
-              <div className="text-center mb-10">
-                <h1 className="text-5xl md:text-6xl font-black text-blue-600 mb-4 tracking-tight drop-shadow-sm">
-                  Sentence Battle
-                </h1>
-                <p className="text-xl text-slate-600 font-bold bg-white inline-block px-4 py-1 rounded-full shadow-sm border border-slate-200">
-                  이의초등학교 <span className="font-normal">| 영어 문장 타이핑 게임</span>
-                </p>
-              </div>
-
-              <div className="space-y-4">
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="w-full max-w-md">
+                <div className="text-center mb-10">
+                  <h1 className="text-5xl md:text-6xl font-black text-blue-600 mb-4 tracking-tight drop-shadow-sm">
                 <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
                    <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
                    <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
@@ -513,6 +513,8 @@
                 </button>
               </div>
             </div>
+            </div>
+            <Footer />
           </div>
         );
       }
@@ -520,12 +522,10 @@
       if (view === 'teacher') {
         if (!isTeacherApprove) {
           return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-slate-800">
-              <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-                <div className="flex justify-center mb-6 text-slate-400">
-                  <Shield size={48} />
-                </div>
-                <h2 className="text-2xl font-black text-center mb-6">교사 인증</h2>
+            <div className="min-h-screen bg-slate-50 flex flex-col p-6 text-slate-800">
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+                  <div className="flex justify-center mb-6 text-slate-400">
                 <form onSubmit={(e) => {
                   e.preventDefault();
                   if (teacherPassword === dbPassword || teacherPassword === '1234') {
@@ -551,6 +551,8 @@
                   <span className="text-slate-400">초기/현재비밀번호 입력</span>
                 </div>
               </div>
+              </div>
+              <Footer />
             </div>
           );
         }
@@ -632,7 +634,7 @@
         return (
           <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
             <Toast />
-            <div className="max-w-6xl mx-auto w-full">
+            <div className="flex-1 max-w-6xl mx-auto w-full">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100 gap-4">
                 <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
                   <span className="bg-slate-800 p-3 rounded-2xl"><Settings className="text-white" size={32} /></span>
@@ -790,17 +792,17 @@
                 </div>
               </div>
             </div>
+            <Footer />
           </div>
         );
       }
 
       if (view === 'profile') {
         return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-800">
-            <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-100">
-              <div className="flex items-center gap-4 mb-8 border-b border-slate-100 pb-4">
-                <button onClick={() => setView('home')} className="text-slate-400 hover:text-blue-600"><ArrowLeft size={24} /></button>
-                <h1 className="text-2xl font-black text-blue-600">참여자 정보 입력</h1>
+          <div className="min-h-screen bg-slate-50 flex flex-col p-6 text-slate-800">
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-100">
+                <div className="flex items-center gap-4 mb-8 border-b border-slate-100 pb-4">
               </div>
               
               <form onSubmit={handleProfileSubmit} className="space-y-5">
@@ -831,15 +833,17 @@
                 </button>
               </form>
             </div>
+            </div>
+            <Footer />
           </div>
         );
       }
 
       if (view === 'lobby') {
         return (
-          <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
+          <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
             <Toast />
-            <div className="max-w-5xl mx-auto">
+            <div className="flex-1 max-w-5xl mx-auto w-full">
               {/* Header */}
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <h1 className="text-3xl font-black text-blue-600 flex items-center gap-3">
@@ -981,6 +985,7 @@
                 </div>
               )}
             </div>
+            <Footer />
           </div>
         );
       }
@@ -1078,6 +1083,7 @@
                 )}
               </div>
             </div>
+            <Footer />
           </div>
         );
       }
@@ -1259,10 +1265,10 @@
         };
 
         return (
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-800">
-            <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-100 text-center animate-in zoom-in duration-500">
-              <Trophy size={80} className="mx-auto text-yellow-500 mb-6 drop-shadow-md" />
-              <h1 className="text-4xl font-black mb-2 text-slate-800">게임 종료!</h1>
+          <div className="min-h-screen bg-slate-50 flex flex-col p-6 text-slate-800">
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-100 text-center animate-in zoom-in duration-500">
+                <Trophy size={80} className="mx-auto text-yellow-500 mb-6 drop-shadow-md" />
               
               {isDraw ? (
                 <h2 className="text-2xl font-bold text-slate-500 mb-8 bg-slate-100 inline-block px-6 py-2 rounded-full">무승부입니다!</h2>
@@ -1294,6 +1300,8 @@
                 </button>
               </div>
             </div>
+            </div>
+            <Footer />
           </div>
         );
       }
@@ -1311,8 +1319,8 @@
         });
 
         return (
-          <div className="min-h-screen bg-slate-50 p-6 text-slate-800">
-            <div className="max-w-4xl mx-auto">
+          <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
+            <div className="flex-1 max-w-4xl mx-auto w-full">
               <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                 <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
                   <span className="bg-emerald-100 p-3 rounded-2xl"><Trophy className="text-emerald-600" size={32} /></span>
@@ -1419,6 +1427,7 @@
                 )}
               </div>
             </div>
+            <Footer />
           </div>
         );
       }
