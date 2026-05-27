@@ -68,7 +68,7 @@
       alert("Firebase 초기화 오류 발생: " + e.message);
     }
 
-    // 🔥 핵심 수정: 선생님의 깃허브(실제 환경)에서는 최상위 컬렉션을 사용하도록 분기 처리
+    // 선생님의 깃허브(실제 환경)에서는 최상위 컬렉션을 사용하도록 분기 처리
     const getPublicPath = (collectionName) => {
       if (isImmersive) return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
       return collection(db, collectionName); // 깃허브에서는 최상위 rooms, leaderboards 컬렉션 사용
@@ -109,8 +109,8 @@
 
     function App() {
       const [user, setUser] = useState(null);
-      const [profile, setProfile] = useState(null); // { name, grade, classNum, studentNum }
-      const [view, setView] = useState('home'); // home, profile, lobby, room, game, leaderboard, teacher
+      const [profile, setProfile] = useState(null); 
+      const [view, setView] = useState('home'); 
       const [rooms, setRooms] = useState([]);
       const [currentRoom, setCurrentRoom] = useState(null);
       const [leaderboardData, setLeaderboardData] = useState([]);
@@ -119,10 +119,10 @@
       const [joinCode, setJoinCode] = useState('');
       const [selectedRoomToJoin, setSelectedRoomToJoin] = useState(null);
 
-      // 교사 모드 및 단원 관리용 상태
+      // 교사 모드 관련 상태
       const [isTeacherApprove, setIsTeacherApprove] = useState(false);
       const [teacherPassword, setTeacherPassword] = useState('');
-      const [dbPassword, setDbPassword] = useState('1234'); // DB 연동 비밀번호
+      const [dbPassword, setDbPassword] = useState('1234'); 
       const [isChangingPassword, setIsChangingPassword] = useState(false);
       const [newPasswordInput, setNewPasswordInput] = useState('');
       const [units, setUnits] = useState([]);
@@ -135,7 +135,7 @@
       // 게임 방어 입력 상태
       const [defenseInput, setDefenseInput] = useState('');
 
-      // 순위표 필터 상태 (React 훅 에러 방지를 위해 최상단으로 이동)
+      // 순위표 필터 상태 (최상단 배치)
       const [filterMode, setFilterMode] = useState('all');
       const [filterGrade, setFilterGrade] = useState('all');
       const [filterClass, setFilterClass] = useState('all');
@@ -145,7 +145,7 @@
         setTimeout(() => setToastMessage(''), 3000);
       };
 
-      // 🔥 추가된 부분: 앱 실행 시 자동으로 익명 로그인(인증)을 처리하는 코드
+      // 익명 로그인 자동 처리
       useEffect(() => {
         if (!auth) return;
         const initAuth = async () => {
@@ -167,6 +167,7 @@
         return () => unsubscribe();
       }, []);
 
+      // DB 실시간 감시 (방, 순위표, 단원)
       useEffect(() => {
         if (!user || (view !== 'lobby' && view !== 'leaderboard' && view !== 'teacher')) return;
 
@@ -174,10 +175,7 @@
           const roomList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           const activeRooms = roomList.filter(r => r.status !== 'finished');
           setRooms(activeRooms);
-        }, (error) => {
-          console.error("Rooms fetch error:", error);
-          alert("데이터베이스 권한 오류! Firebase Firestore의 '규칙'을 테스트 모드(allow read, write: if true;)로 변경해주세요.");
-        });
+        }, (error) => console.error("Rooms fetch error:", error));
 
         const unsubscribeLeaderboard = onSnapshot(getPublicPath('leaderboards'), (snapshot) => {
           const lbList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -213,6 +211,7 @@
         fetchPassword();
       }, [user]);
 
+      // 현재 참여중인 방 실시간 감시
       useEffect(() => {
         if (!user || !currentRoom?.id) return;
         
@@ -257,7 +256,7 @@
              roomSentences = allSentences;
              unitName = '모든 단원 믹스';
           }
-        } else {
+        } else if (selectedUnitId !== 'default') {
           const selectedUnitData = units.find(u => u.id === selectedUnitId);
           if (selectedUnitData && selectedUnitData.sentences.length > 0) {
             roomSentences = selectedUnitData.sentences;
@@ -269,7 +268,7 @@
         const roomData = {
           hostId: user.uid,
           roomCode: code,
-          mode: mode, // '1v1', 'team', 'class'
+          mode: mode, 
           unitName: unitName,
           sentences: roomSentences,
           status: 'waiting',
@@ -382,15 +381,14 @@
         if (!currentRoom?.currentAttack) return;
         
         const targetEn = currentRoom.currentAttack.en;
-        setDefenseInput(''); // 항상 입력창 초기화 (오답이든 정답이든 다음 턴 진행)
+        setDefenseInput(''); // 항상 입력창 초기화
         
         let points = 0;
-        // 정답 체크 (대소문자 무시, 공백 및 특수기호 정상화)
+        // 정답 체크 (대소문자 무시)
         if (val.trim().toLowerCase() === targetEn.trim().toLowerCase()) {
           const timeTaken = Date.now() - currentRoom.currentAttack.startTime;
           points = Math.max(10, Math.floor(((MAX_TIME_MS - timeTaken) / MAX_TIME_MS) * 100));
           if (timeTaken > MAX_TIME_MS) points = 10;
-          
           showToast(`${profile.name}님이 정답을 맞췄습니다! (+${points}점)`);
         } else {
           showToast(`${profile.name}님의 오답! 턴이 넘어갑니다. (0점)`);
@@ -439,10 +437,9 @@
           playersA: roomData.teamA.players.map(p => p.name).join(', '),
           playersB: roomData.teamB.players.map(p => p.name).join(', ')
         });
-
-        // 상태를 'finished'로 업데이트하면 useEffect가 감지하여 자동으로 'result' 화면으로 넘어갑니다.
       };
 
+      // 타임아웃 감지
       useEffect(() => {
         if (view !== 'game' || !currentRoom?.currentAttack) return;
         
@@ -496,23 +493,33 @@
             <Toast />
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="w-full max-w-md">
+                
                 <div className="text-center mb-10">
                   <h1 className="text-5xl md:text-6xl font-black text-blue-600 mb-4 tracking-tight drop-shadow-sm">
-                <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
-                   <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
-                   <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
-                </button>
-                
-                <button onClick={() => setView('leaderboard')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white p-6 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-emerald-700">
-                   <span className="text-2xl font-black mb-1 flex items-center gap-2"><Trophy fill="currentColor" size={24} /> 순위 확인</span>
-                   <span className="text-emerald-100 font-medium">우리 반, 학년, 전체 랭킹 보기</span>
-                </button>
+                    Sentence Battle
+                  </h1>
+                  <p className="text-xl text-slate-600 font-bold bg-white inline-block px-4 py-1 rounded-full shadow-sm border border-slate-200">
+                    이의초등학교 <span className="font-normal">| 영어 문장 타이핑 게임</span>
+                  </p>
+                </div>
 
-                <button onClick={() => setView('teacher')} className="w-full bg-white hover:bg-slate-100 text-slate-700 p-6 rounded-2xl shadow-lg border-2 border-slate-200 transition-all hover:-translate-y-1 flex flex-col items-center">
-                   <span className="text-xl font-bold flex items-center gap-2"><Settings size={20} /> 교사 모드 (설정)</span>
-                </button>
+                <div className="space-y-4">
+                  <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
+                    <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
+                    <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
+                  </button>
+                  
+                  <button onClick={() => setView('leaderboard')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white p-6 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-emerald-700">
+                    <span className="text-2xl font-black mb-1 flex items-center gap-2"><Trophy fill="currentColor" size={24} /> 순위 확인</span>
+                    <span className="text-emerald-100 font-medium">우리 반, 학년, 전체 랭킹 보기</span>
+                  </button>
+
+                  <button onClick={() => setView('teacher')} className="w-full bg-white hover:bg-slate-100 text-slate-700 p-6 rounded-2xl shadow-lg border-2 border-slate-200 transition-all hover:-translate-y-1 flex flex-col items-center">
+                    <span className="text-xl font-bold flex items-center gap-2"><Settings size={20} /> 교사 모드 (설정)</span>
+                  </button>
+                </div>
+
               </div>
-            </div>
             </div>
             <Footer />
           </div>
@@ -526,31 +533,34 @@
               <div className="flex-1 flex flex-col items-center justify-center">
                 <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
                   <div className="flex justify-center mb-6 text-slate-400">
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  if (teacherPassword === dbPassword || teacherPassword === '1234') {
-                    setIsTeacherApprove(true);
-                    showToast("교사 모드 접속 성공!");
-                  } else {
-                    showToast("비밀번호가 틀렸습니다.");
-                  }
-                }} className="space-y-4 mb-8">
-                  <input 
-                    type="password" 
-                    value={teacherPassword}
-                    onChange={(e) => setTeacherPassword(e.target.value)}
-                    placeholder="비밀번호 입력 후 Enter" 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-center focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
-                  />
-                  <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-xl transition-colors">
-                    인증하기
-                  </button>
-                </form>
-                <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                  <button onClick={() => setView('home')} className="flex items-center gap-1 hover:text-blue-600"><ArrowLeft size={16}/> 뒤로</button>
-                  <span className="text-slate-400">초기/현재비밀번호 입력</span>
+                    <Shield size={48} />
+                  </div>
+                  <h2 className="text-2xl font-black text-center mb-6">교사 인증</h2>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (teacherPassword === dbPassword || teacherPassword === '1234') {
+                      setIsTeacherApprove(true);
+                      showToast("교사 모드 접속 성공!");
+                    } else {
+                      showToast("비밀번호가 틀렸습니다.");
+                    }
+                  }} className="space-y-4 mb-8">
+                    <input 
+                      type="password" 
+                      value={teacherPassword}
+                      onChange={(e) => setTeacherPassword(e.target.value)}
+                      placeholder="비밀번호 입력 후 Enter" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-center focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" 
+                    />
+                    <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-xl transition-colors">
+                      인증하기
+                    </button>
+                  </form>
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-500">
+                    <button onClick={() => setView('home')} className="flex items-center gap-1 hover:text-blue-600"><ArrowLeft size={16}/> 뒤로</button>
+                    <span className="text-slate-400">초기/현재비밀번호 입력</span>
+                  </div>
                 </div>
-              </div>
               </div>
               <Footer />
             </div>
@@ -575,7 +585,6 @@
 
         const handleSaveUnit = async () => {
           if (!editingUnit) return;
-          // 빈 문장 필터링
           const validSentences = editingUnit.sentences.filter(s => s.ko.trim() !== '' && s.en.trim() !== '');
           await updateDoc(doc(getPublicPath('units'), editingUnit.id), {
             name: editingUnit.name,
@@ -665,7 +674,6 @@
               </div>
 
               <div className="flex flex-col md:flex-row gap-6">
-                {/* 단원 목록 */}
                 <div className="w-full md:w-1/3 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col h-[70vh]">
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-black flex items-center gap-2"><Edit3 size={24} className="text-blue-500"/> 학습 단원 목록</h2>
@@ -686,7 +694,6 @@
                   </div>
                 </div>
 
-                {/* 문장 편집 */}
                 <div className="w-full md:w-2/3 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col h-[70vh]">
                   {editingUnit ? (
                     <>
@@ -803,36 +810,38 @@
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-100">
                 <div className="flex items-center gap-4 mb-8 border-b border-slate-100 pb-4">
+                  <button onClick={() => setView('home')} className="text-slate-400 hover:text-blue-600"><ArrowLeft size={24} /></button>
+                  <h1 className="text-2xl font-black text-blue-600">참여자 정보 입력</h1>
+                </div>
+                
+                <form onSubmit={handleProfileSubmit} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-500 mb-2">이름 / 닉네임</label>
+                    <input name="name" required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="홍길동" defaultValue={profile?.name || ''} />
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-slate-500 mb-2">학년</label>
+                      <select name="grade" defaultValue={profile?.grade || '1'} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                        {[1,2,3,4,5,6].map(g => <option key={g} value={g}>{g}학년</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-slate-500 mb-2">반</label>
+                      <select name="classNum" defaultValue={profile?.classNum || '1'} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
+                        {Array.from({length: 20}, (_, i) => i + 1).map(c => <option key={c} value={c}>{c}반</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-slate-500 mb-2">번호</label>
+                      <input name="studentNum" type="number" min="1" max="100" defaultValue={profile?.studentNum || '1'} required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" />
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full mt-8 bg-blue-500 hover:bg-blue-600 text-white font-black text-lg py-4 rounded-xl transition-all shadow-md shadow-blue-500/20 hover:-translate-y-1">
+                    게임 방법 선택하기
+                  </button>
+                </form>
               </div>
-              
-              <form onSubmit={handleProfileSubmit} className="space-y-5">
-                <div>
-                  <label className="block text-sm font-bold text-slate-500 mb-2">이름 / 닉네임</label>
-                  <input name="name" required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" placeholder="홍길동" defaultValue={profile?.name || ''} />
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold text-slate-500 mb-2">학년</label>
-                    <select name="grade" defaultValue={profile?.grade || '1'} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                      {[1,2,3,4,5,6].map(g => <option key={g} value={g}>{g}학년</option>)}
-                    </select>
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold text-slate-500 mb-2">반</label>
-                    <select name="classNum" defaultValue={profile?.classNum || '1'} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
-                      {Array.from({length: 20}, (_, i) => i + 1).map(c => <option key={c} value={c}>{c}반</option>)}
-                    </select>
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold text-slate-500 mb-2">번호</label>
-                    <input name="studentNum" type="number" min="1" max="100" defaultValue={profile?.studentNum || '1'} required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" />
-                  </div>
-                </div>
-                <button type="submit" className="w-full mt-8 bg-blue-500 hover:bg-blue-600 text-white font-black text-lg py-4 rounded-xl transition-all shadow-md shadow-blue-500/20 hover:-translate-y-1">
-                  게임 방법 선택하기
-                </button>
-              </form>
-            </div>
             </div>
             <Footer />
           </div>
@@ -844,7 +853,6 @@
           <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
             <Toast />
             <div className="flex-1 max-w-5xl mx-auto w-full">
-              {/* Header */}
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <h1 className="text-3xl font-black text-blue-600 flex items-center gap-3">
                   <Swords className="text-blue-500" size={32} />
@@ -867,7 +875,6 @@
               </div>
 
               <div className="grid md:grid-cols-2 gap-8">
-                {/* 방 만들기 섹션 */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
                   <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
                     <span className="w-2 h-6 bg-blue-500 rounded-full inline-block"></span>
@@ -918,7 +925,6 @@
                   </div>
                 </div>
 
-                {/* 방 참여하기 섹션 */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col">
                   <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
                     <span className="w-2 h-6 bg-emerald-500 rounded-full inline-block"></span>
@@ -953,7 +959,6 @@
                 </div>
               </div>
 
-              {/* 팀 선택 모달 */}
               {selectedRoomToJoin && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                   <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-slate-100 animate-in fade-in zoom-in duration-200">
@@ -1014,7 +1019,6 @@
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 mb-8">
-                {/* Team A */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border-t-8 border-red-500 flex flex-col">
                   <h2 className="text-2xl font-black text-red-600 mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
                     <span>Team A (홍팀)</span>
@@ -1039,7 +1043,6 @@
                   )}
                 </div>
 
-                {/* Team B */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border-t-8 border-blue-500 flex flex-col">
                   <h2 className="text-2xl font-black text-blue-600 mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
                     <span>Team B (청팀)</span>
@@ -1269,37 +1272,37 @@
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-100 text-center animate-in zoom-in duration-500">
                 <Trophy size={80} className="mx-auto text-yellow-500 mb-6 drop-shadow-md" />
-              
-              {isDraw ? (
-                <h2 className="text-2xl font-bold text-slate-500 mb-8 bg-slate-100 inline-block px-6 py-2 rounded-full">무승부입니다!</h2>
-              ) : (
-                <h2 className={`text-3xl font-black ${winColor} mb-8 bg-slate-50 inline-block px-6 py-2 rounded-full border border-slate-100`}>
-                  {winTeam} 승리!
-                </h2>
-              )}
+                
+                {isDraw ? (
+                  <h2 className="text-2xl font-bold text-slate-500 mb-8 bg-slate-100 inline-block px-6 py-2 rounded-full">무승부입니다!</h2>
+                ) : (
+                  <h2 className={`text-3xl font-black ${winColor} mb-8 bg-slate-50 inline-block px-6 py-2 rounded-full border border-slate-100`}>
+                    {winTeam} 승리!
+                  </h2>
+                )}
 
-              <div className="flex justify-center gap-6 md:gap-12 mb-12">
-                <div className="bg-red-50 p-6 rounded-3xl border-4 border-red-100 w-40 md:w-48 shadow-sm relative">
-                  {scoreA > scoreB && <Crown size={32} className="text-yellow-500 absolute -top-5 left-1/2 transform -translate-x-1/2 drop-shadow-sm" />}
-                  <div className="text-red-600 font-black mb-2 text-lg">Team A (홍팀)</div>
-                  <div className="text-5xl font-black text-slate-800">{scoreA}</div>
+                <div className="flex justify-center gap-6 md:gap-12 mb-12">
+                  <div className="bg-red-50 p-6 rounded-3xl border-4 border-red-100 w-40 md:w-48 shadow-sm relative">
+                    {scoreA > scoreB && <Crown size={32} className="text-yellow-500 absolute -top-5 left-1/2 transform -translate-x-1/2 drop-shadow-sm" />}
+                    <div className="text-red-600 font-black mb-2 text-lg">Team A (홍팀)</div>
+                    <div className="text-5xl font-black text-slate-800">{scoreA}</div>
+                  </div>
+                  <div className="bg-blue-50 p-6 rounded-3xl border-4 border-blue-100 w-40 md:w-48 shadow-sm relative">
+                    {scoreB > scoreA && <Crown size={32} className="text-yellow-500 absolute -top-5 left-1/2 transform -translate-x-1/2 drop-shadow-sm" />}
+                    <div className="text-blue-600 font-black mb-2 text-lg">Team B (청팀)</div>
+                    <div className="text-5xl font-black text-slate-800">{scoreB}</div>
+                  </div>
                 </div>
-                <div className="bg-blue-50 p-6 rounded-3xl border-4 border-blue-100 w-40 md:w-48 shadow-sm relative">
-                  {scoreB > scoreA && <Crown size={32} className="text-yellow-500 absolute -top-5 left-1/2 transform -translate-x-1/2 drop-shadow-sm" />}
-                  <div className="text-blue-600 font-black mb-2 text-lg">Team B (청팀)</div>
-                  <div className="text-5xl font-black text-slate-800">{scoreB}</div>
+
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <button onClick={() => exitTo('leaderboard')} className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md shadow-emerald-500/20 hover:-translate-y-1">
+                    순위표 보기
+                  </button>
+                  <button onClick={() => exitTo('lobby')} className="flex-1 sm:flex-none bg-slate-200 hover:bg-slate-300 text-slate-700 px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md hover:-translate-y-1">
+                    대기실로 돌아가기
+                  </button>
                 </div>
               </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button onClick={() => exitTo('leaderboard')} className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md shadow-emerald-500/20 hover:-translate-y-1">
-                  순위표 보기
-                </button>
-                <button onClick={() => exitTo('lobby')} className="flex-1 sm:flex-none bg-slate-200 hover:bg-slate-300 text-slate-700 px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md hover:-translate-y-1">
-                  대기실로 돌아가기
-                </button>
-              </div>
-            </div>
             </div>
             <Footer />
           </div>
@@ -1437,7 +1440,6 @@
 
     const root = ReactDOMClient.createRoot(document.getElementById('root'));
     
-    // API 키 미입력 시, 앱 크래쉬 대신 친절한 경고창 렌더링
     if (isMissingConfig) {
         const SetupWarning = () => (
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center font-sans">
