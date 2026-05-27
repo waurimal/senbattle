@@ -68,7 +68,7 @@
       alert("Firebase 초기화 오류 발생: " + e.message);
     }
 
-    // 선생님의 깃허브(실제 환경)에서는 최상위 컬렉션을 사용하도록 분기 처리
+    // 🔥 핵심 수정: 선생님의 깃허브(실제 환경)에서는 최상위 컬렉션을 사용하도록 분기 처리
     const getPublicPath = (collectionName) => {
       if (isImmersive) return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
       return collection(db, collectionName); // 깃허브에서는 최상위 rooms, leaderboards 컬렉션 사용
@@ -109,8 +109,8 @@
 
     function App() {
       const [user, setUser] = useState(null);
-      const [profile, setProfile] = useState(null); 
-      const [view, setView] = useState('home'); 
+      const [profile, setProfile] = useState(null); // { name, grade, classNum, studentNum }
+      const [view, setView] = useState('home'); // home, profile, lobby, room, game, leaderboard, teacher
       const [rooms, setRooms] = useState([]);
       const [currentRoom, setCurrentRoom] = useState(null);
       const [leaderboardData, setLeaderboardData] = useState([]);
@@ -119,10 +119,10 @@
       const [joinCode, setJoinCode] = useState('');
       const [selectedRoomToJoin, setSelectedRoomToJoin] = useState(null);
 
-      // 교사 모드 관련 상태
+      // 교사 모드 및 단원 관리용 상태
       const [isTeacherApprove, setIsTeacherApprove] = useState(false);
       const [teacherPassword, setTeacherPassword] = useState('');
-      const [dbPassword, setDbPassword] = useState('1234'); 
+      const [dbPassword, setDbPassword] = useState('1234'); // DB 연동 비밀번호
       const [isChangingPassword, setIsChangingPassword] = useState(false);
       const [newPasswordInput, setNewPasswordInput] = useState('');
       const [units, setUnits] = useState([]);
@@ -135,7 +135,7 @@
       // 게임 방어 입력 상태
       const [defenseInput, setDefenseInput] = useState('');
 
-      // 순위표 필터 상태 (최상단 배치)
+      // 순위표 필터 상태 (React 훅 에러 방지를 위해 최상단으로 이동)
       const [filterMode, setFilterMode] = useState('all');
       const [filterGrade, setFilterGrade] = useState('all');
       const [filterClass, setFilterClass] = useState('all');
@@ -145,7 +145,7 @@
         setTimeout(() => setToastMessage(''), 3000);
       };
 
-      // 익명 로그인 자동 처리
+      // 🔥 추가된 부분: 앱 실행 시 자동으로 익명 로그인(인증)을 처리하는 코드
       useEffect(() => {
         if (!auth) return;
         const initAuth = async () => {
@@ -167,7 +167,6 @@
         return () => unsubscribe();
       }, []);
 
-      // DB 실시간 감시 (방, 순위표, 단원)
       useEffect(() => {
         if (!user || (view !== 'lobby' && view !== 'leaderboard' && view !== 'teacher')) return;
 
@@ -175,7 +174,10 @@
           const roomList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           const activeRooms = roomList.filter(r => r.status !== 'finished');
           setRooms(activeRooms);
-        }, (error) => console.error("Rooms fetch error:", error));
+        }, (error) => {
+          console.error("Rooms fetch error:", error);
+          alert("데이터베이스 권한 오류! Firebase Firestore의 '규칙'을 테스트 모드(allow read, write: if true;)로 변경해주세요.");
+        });
 
         const unsubscribeLeaderboard = onSnapshot(getPublicPath('leaderboards'), (snapshot) => {
           const lbList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -211,7 +213,6 @@
         fetchPassword();
       }, [user]);
 
-      // 현재 참여중인 방 실시간 감시
       useEffect(() => {
         if (!user || !currentRoom?.id) return;
         
@@ -268,7 +269,7 @@
         const roomData = {
           hostId: user.uid,
           roomCode: code,
-          mode: mode, 
+          mode: mode, // '1v1', 'team', 'class'
           unitName: unitName,
           sentences: roomSentences,
           status: 'waiting',
@@ -381,14 +382,15 @@
         if (!currentRoom?.currentAttack) return;
         
         const targetEn = currentRoom.currentAttack.en;
-        setDefenseInput(''); // 항상 입력창 초기화
+        setDefenseInput(''); // 항상 입력창 초기화 (오답이든 정답이든 다음 턴 진행)
         
         let points = 0;
-        // 정답 체크 (대소문자 무시)
+        // 정답 체크 (대소문자 무시, 공백 및 특수기호 정상화)
         if (val.trim().toLowerCase() === targetEn.trim().toLowerCase()) {
           const timeTaken = Date.now() - currentRoom.currentAttack.startTime;
           points = Math.max(10, Math.floor(((MAX_TIME_MS - timeTaken) / MAX_TIME_MS) * 100));
           if (timeTaken > MAX_TIME_MS) points = 10;
+          
           showToast(`${profile.name}님이 정답을 맞췄습니다! (+${points}점)`);
         } else {
           showToast(`${profile.name}님의 오답! 턴이 넘어갑니다. (0점)`);
@@ -437,9 +439,10 @@
           playersA: roomData.teamA.players.map(p => p.name).join(', '),
           playersB: roomData.teamB.players.map(p => p.name).join(', ')
         });
+
+        // 상태를 'finished'로 업데이트하면 useEffect가 감지하여 자동으로 'result' 화면으로 넘어갑니다.
       };
 
-      // 타임아웃 감지
       useEffect(() => {
         if (view !== 'game' || !currentRoom?.currentAttack) return;
         
@@ -480,6 +483,7 @@
         );
       };
 
+      /* 🔥 새롭게 추가된 저작권 푸터 컴포넌트 🔥 */
       const Footer = () => (
         <footer className="w-full text-center py-8 text-slate-400 text-sm font-bold mt-auto">
           <p>만든이: 곽현석(이의초등학교)</p>
@@ -493,7 +497,6 @@
             <Toast />
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="w-full max-w-md">
-                
                 <div className="text-center mb-10">
                   <h1 className="text-5xl md:text-6xl font-black text-blue-600 mb-4 tracking-tight drop-shadow-sm">
                     Sentence Battle
@@ -505,23 +508,22 @@
 
                 <div className="space-y-4">
                   <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
-                    <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
-                    <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
+                     <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
+                     <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
                   </button>
                   
                   <button onClick={() => setView('leaderboard')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white p-6 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-emerald-700">
-                    <span className="text-2xl font-black mb-1 flex items-center gap-2"><Trophy fill="currentColor" size={24} /> 순위 확인</span>
-                    <span className="text-emerald-100 font-medium">우리 반, 학년, 전체 랭킹 보기</span>
+                     <span className="text-2xl font-black mb-1 flex items-center gap-2"><Trophy fill="currentColor" size={24} /> 순위 확인</span>
+                     <span className="text-emerald-100 font-medium">우리 반, 학년, 전체 랭킹 보기</span>
                   </button>
 
                   <button onClick={() => setView('teacher')} className="w-full bg-white hover:bg-slate-100 text-slate-700 p-6 rounded-2xl shadow-lg border-2 border-slate-200 transition-all hover:-translate-y-1 flex flex-col items-center">
-                    <span className="text-xl font-bold flex items-center gap-2"><Settings size={20} /> 교사 모드 (설정)</span>
+                     <span className="text-xl font-bold flex items-center gap-2"><Settings size={20} /> 교사 모드 (설정)</span>
                   </button>
                 </div>
-
               </div>
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -562,7 +564,7 @@
                   </div>
                 </div>
               </div>
-              <Footer />
+              <Footer /> {/* 푸터 추가 */}
             </div>
           );
         }
@@ -585,6 +587,7 @@
 
         const handleSaveUnit = async () => {
           if (!editingUnit) return;
+          // 빈 문장 필터링
           const validSentences = editingUnit.sentences.filter(s => s.ko.trim() !== '' && s.en.trim() !== '');
           await updateDoc(doc(getPublicPath('units'), editingUnit.id), {
             name: editingUnit.name,
@@ -674,6 +677,7 @@
               </div>
 
               <div className="flex flex-col md:flex-row gap-6">
+                {/* 단원 목록 */}
                 <div className="w-full md:w-1/3 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col h-[70vh]">
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-black flex items-center gap-2"><Edit3 size={24} className="text-blue-500"/> 학습 단원 목록</h2>
@@ -694,6 +698,7 @@
                   </div>
                 </div>
 
+                {/* 문장 편집 */}
                 <div className="w-full md:w-2/3 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col h-[70vh]">
                   {editingUnit ? (
                     <>
@@ -799,7 +804,7 @@
                 </div>
               </div>
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -843,7 +848,7 @@
                 </form>
               </div>
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -853,6 +858,7 @@
           <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
             <Toast />
             <div className="flex-1 max-w-5xl mx-auto w-full">
+              {/* Header */}
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <h1 className="text-3xl font-black text-blue-600 flex items-center gap-3">
                   <Swords className="text-blue-500" size={32} />
@@ -875,6 +881,7 @@
               </div>
 
               <div className="grid md:grid-cols-2 gap-8">
+                {/* 방 만들기 섹션 */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
                   <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
                     <span className="w-2 h-6 bg-blue-500 rounded-full inline-block"></span>
@@ -925,6 +932,7 @@
                   </div>
                 </div>
 
+                {/* 방 참여하기 섹션 */}
                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col">
                   <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
                     <span className="w-2 h-6 bg-emerald-500 rounded-full inline-block"></span>
@@ -959,6 +967,7 @@
                 </div>
               </div>
 
+              {/* 팀 선택 모달 */}
               {selectedRoomToJoin && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                   <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-slate-100 animate-in fade-in zoom-in duration-200">
@@ -990,7 +999,7 @@
                 </div>
               )}
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -1019,6 +1028,7 @@
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 mb-8">
+                {/* Team A */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border-t-8 border-red-500 flex flex-col">
                   <h2 className="text-2xl font-black text-red-600 mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
                     <span>Team A (홍팀)</span>
@@ -1043,6 +1053,7 @@
                   )}
                 </div>
 
+                {/* Team B */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border-t-8 border-blue-500 flex flex-col">
                   <h2 className="text-2xl font-black text-blue-600 mb-6 flex justify-between items-center border-b border-slate-100 pb-4">
                     <span>Team B (청팀)</span>
@@ -1086,7 +1097,7 @@
                 )}
               </div>
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -1304,7 +1315,7 @@
                 </div>
               </div>
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -1430,7 +1441,7 @@
                 )}
               </div>
             </div>
-            <Footer />
+            <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -1440,6 +1451,7 @@
 
     const root = ReactDOMClient.createRoot(document.getElementById('root'));
     
+    // API 키 미입력 시, 앱 크래쉬 대신 친절한 경고창 렌더링
     if (isMissingConfig) {
         const SetupWarning = () => (
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center font-sans">
