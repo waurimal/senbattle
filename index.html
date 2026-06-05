@@ -110,10 +110,9 @@
     function App() {
       const [user, setUser] = useState(null);
       const [profile, setProfile] = useState(null); // { name, grade, classNum, studentNum }
-      const [view, setView] = useState('home'); // home, profile, lobby, room, game, leaderboard, teacher
+      const [view, setView] = useState('home'); // home, profile, lobby, room, game, teacher
       const [rooms, setRooms] = useState([]);
       const [currentRoom, setCurrentRoom] = useState(null);
-      const [leaderboardData, setLeaderboardData] = useState([]);
       const [toastMessage, setToastMessage] = useState('');
 
       const [joinCode, setJoinCode] = useState('');
@@ -147,28 +146,7 @@
 
       // 🔥 추가된 부분: 앱 실행 시 자동으로 익명 로그인(인증)을 처리하는 코드
       useEffect(() => {
-        if (!auth) return;
-        const initAuth = async () => {
-          try {
-            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-              await signInWithCustomToken(auth, window.__initial_auth_token);
-            } else {
-              await signInAnonymously(auth);
-            }
-          } catch (error) {
-            console.error("인증 에러:", error);
-          }
-        };
-        initAuth();
-
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-          setUser(currentUser);
-        });
-        return () => unsubscribe();
-      }, []);
-
-      useEffect(() => {
-        if (!user || (view !== 'lobby' && view !== 'leaderboard' && view !== 'teacher')) return;
+        if (!user || (view !== 'lobby' && view !== 'teacher')) return;
 
         const unsubscribeRooms = onSnapshot(getPublicPath('rooms'), (snapshot) => {
           const roomList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -179,11 +157,6 @@
           alert("데이터베이스 권한 오류! Firebase Firestore의 '규칙'을 테스트 모드(allow read, write: if true;)로 변경해주세요.");
         });
 
-        const unsubscribeLeaderboard = onSnapshot(getPublicPath('leaderboards'), (snapshot) => {
-          const lbList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setLeaderboardData(lbList);
-        }, (error) => console.error("Leaderboard fetch error:", error));
-
         const unsubscribeUnits = onSnapshot(getPublicPath('units'), (snapshot) => {
           const unitList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.createdAt - b.createdAt);
           setUnits(unitList);
@@ -191,7 +164,6 @@
 
         return () => {
           unsubscribeRooms();
-          unsubscribeLeaderboard();
           unsubscribeUnits();
         };
       }, [user, view]);
@@ -436,6 +408,8 @@
           timestamp: Date.now(),
           teamA_score: scoreA,
           teamB_score: scoreB,
+          teamA_players: roomData.teamA.players,
+          teamB_players: roomData.teamB.players,
           playersA: roomData.teamA.players.map(p => `${p.studentNum}번`).join(', '),
           playersB: roomData.teamB.players.map(p => `${p.studentNum}번`).join(', ')
         });
@@ -507,23 +481,18 @@
                 </div>
 
                 <div className="space-y-4">
-                  <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
+                <button onClick={() => setView('profile')} className="w-full bg-blue-500 hover:bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-blue-700">
                    <span className="text-2xl font-black mb-1 flex items-center gap-2"><Play fill="currentColor" size={24} /> 게임 시작</span>
                    <span className="text-blue-100 font-medium">단원 선택 후 바로 타이핑 도전!</span>
                 </button>
                 
-                <button onClick={() => setView('leaderboard')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white p-6 rounded-2xl shadow-xl shadow-emerald-500/20 transition-all hover:-translate-y-1 flex flex-col items-center border-b-4 border-emerald-700">
-                   <span className="text-2xl font-black mb-1 flex items-center gap-2"><Trophy fill="currentColor" size={24} /> 명예의 전당</span>
-                   <span className="text-emerald-100 font-medium">우리 반, 학년, 전체 랭킹 보기</span>
-                </button>
-
                 <button onClick={() => setView('teacher')} className="w-full bg-white hover:bg-slate-100 text-slate-700 p-6 rounded-2xl shadow-lg border-2 border-slate-200 transition-all hover:-translate-y-1 flex flex-col items-center">
                      <span className="text-xl font-bold flex items-center gap-2"><Settings size={20} /> 교사 모드 (설정)</span>
                   </button>
-                </div>
               </div>
             </div>
-            <Footer /> {/* 푸터 추가 */}
+          </div>
+          <Footer /> {/* 푸터 추가 */}
           </div>
         );
       }
@@ -1305,140 +1274,11 @@
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button onClick={() => exitTo('leaderboard')} className="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md shadow-emerald-500/20 hover:-translate-y-1">
-                  명예의 전당 보기
-                </button>
-                <button onClick={() => exitTo('lobby')} className="flex-1 sm:flex-none bg-slate-200 hover:bg-slate-300 text-slate-700 px-8 py-4 rounded-xl font-black text-lg transition-all shadow-md hover:-translate-y-1">
-                  대기실로 돌아가기
+                <div className="flex justify-center">
+                  <button onClick={() => exitTo('lobby')} className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-700 px-12 py-4 rounded-xl font-black text-lg transition-all shadow-md hover:-translate-y-1">
+                    대기실로 돌아가기
                   </button>
                 </div>
-              </div>
-            </div>
-            <Footer /> {/* 푸터 추가 */}
-          </div>
-        );
-      }
-
-      if (view === 'leaderboard') {
-        const filteredData = leaderboardData.filter(d => {
-          if (filterMode !== 'all' && d.mode !== filterMode) return false;
-          if (filterGrade !== 'all' && d.grade !== filterGrade) return false;
-          if (filterClass !== 'all' && String(d.classNum) !== String(filterClass)) return false;
-          return true;
-        }).sort((a, b) => {
-          const maxA = Math.max(a.teamA_score || 0, a.teamB_score || 0);
-          const maxB = Math.max(b.teamA_score || 0, b.teamB_score || 0);
-          return maxB - maxA;
-        });
-
-        return (
-          <div className="min-h-screen bg-slate-50 p-6 flex flex-col text-slate-800">
-            <div className="flex-1 max-w-4xl mx-auto w-full">
-              <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-                  <span className="bg-emerald-100 p-3 rounded-2xl"><Trophy className="text-emerald-600" size={32} /></span>
-                  명예의 전당
-                </h1>
-                <button onClick={() => setView('home')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-colors">
-                  <ArrowLeft size={20} /> 홈으로 돌아가기
-                </button>
-              </div>
-
-              <div className="flex flex-col md:flex-row gap-4 mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-                <div className="flex-1">
-                  <label className="block text-sm font-black text-slate-500 mb-2">대결 방식</label>
-                  <select 
-                    value={filterMode} 
-                    onChange={(e) => setFilterMode(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
-                  >
-                    <option value="all">전체보기</option>
-                    <option value="1v1">1:1 대결</option>
-                    <option value="team">팀 대결</option>
-                    <option value="class">학급 대결</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-black text-slate-500 mb-2">학년</label>
-                  <select 
-                    value={filterGrade} 
-                    onChange={(e) => setFilterGrade(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
-                  >
-                    <option value="all">전체 학년</option>
-                    {[1,2,3,4,5,6].map(g => <option key={g} value={String(g)}>{g}학년</option>)}
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-black text-slate-500 mb-2">반</label>
-                  <select 
-                    value={filterClass} 
-                    onChange={(e) => setFilterClass(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
-                  >
-                    <option value="all">전체 반</option>
-                    {Array.from({length: 20}, (_, i) => i + 1).map(c => <option key={c} value={String(c)}>{c}반</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {filteredData.length === 0 ? (
-                  <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-                    <Trophy size={64} className="text-slate-300 mx-auto mb-4" />
-                    <p className="text-xl font-bold text-slate-500">조건에 맞는 기록이 없습니다.</p>
-                    <p className="text-slate-400 mt-2">게임을 플레이하고 첫 번째 명예의 전당 주인공이 되어보세요!</p>
-                  </div>
-                ) : (
-                  filteredData.map((record, index) => {
-                    const isAWinner = record.teamA_score >= record.teamB_score;
-                    const winScore = isAWinner ? record.teamA_score : record.teamB_score;
-                    const loseScore = isAWinner ? record.teamB_score : record.teamA_score;
-                    const winPlayers = isAWinner ? record.playersA : record.playersB;
-                    const losePlayers = isAWinner ? record.playersB : record.playersA;
-                    
-                    return (
-                      <div key={record.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-6 hover:shadow-md transition-shadow">
-                        <div className="w-16 flex justify-center shrink-0">
-                          {index === 0 ? <div className="bg-yellow-100 p-3 rounded-2xl"><Medal size={40} className="text-yellow-500" /></div> :
-                           index === 1 ? <div className="bg-slate-100 p-3 rounded-2xl"><Medal size={36} className="text-slate-400" /></div> :
-                           index === 2 ? <div className="bg-amber-100 p-3 rounded-2xl"><Medal size={32} className="text-amber-600" /></div> :
-                           <span className="text-3xl font-black text-slate-300">{index + 1}</span>}
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <span className={`px-2 py-1 text-xs rounded-lg font-black text-white
-                              ${record.mode === '1v1' ? 'bg-blue-500' : record.mode === 'team' ? 'bg-emerald-500' : 'bg-purple-500'}`}>
-                              {record.mode === '1v1' ? '1:1' : record.mode === 'team' ? '팀전' : '학급전'}
-                            </span>
-                            <span className="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-                              {record.grade}학년 {record.classNum}반
-                            </span>
-                            <span className="text-xs font-bold text-slate-400">
-                              {new Date(record.timestamp).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <div className="font-black text-xl text-slate-800 truncate">
-                            <span className="text-emerald-500 mr-2">WIN</span>
-                            {winPlayers || '알 수 없음'}
-                          </div>
-                          {losePlayers && (
-                            <div className="text-sm font-bold text-slate-400 truncate mt-1">
-                              vs {losePlayers}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <div className="text-3xl font-black text-blue-600">{winScore} <span className="text-sm font-bold text-blue-400">pts</span></div>
-                          {loseScore > 0 && <div className="text-sm font-bold text-slate-400">{loseScore} pts</div>}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             </div>
             <Footer /> {/* 푸터 추가 */}
