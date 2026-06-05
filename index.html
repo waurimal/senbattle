@@ -436,8 +436,8 @@
           timestamp: Date.now(),
           teamA_score: scoreA,
           teamB_score: scoreB,
-          playersA: roomData.teamA.players.map(p => `${p.grade}학년 ${p.classNum}반 ${p.studentNum}번`).join(', '),
-          playersB: roomData.teamB.players.map(p => `${p.grade}학년 ${p.classNum}반 ${p.studentNum}번`).join(', ')
+          playersA: roomData.teamA.players.map(p => `${p.studentNum}번`).join(', '),
+          playersB: roomData.teamB.players.map(p => `${p.studentNum}번`).join(', ')
         });
 
         // 상태를 'finished'로 업데이트하면 useEffect가 감지하여 자동으로 'result' 화면으로 넘어갑니다.
